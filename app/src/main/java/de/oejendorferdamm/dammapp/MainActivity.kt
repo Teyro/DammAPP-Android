@@ -28,12 +28,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         Kern.init(this)
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("vorschau", false)) Kern.vorschauDaten()
         ziel.value = Bereich.aus(intent)
         setContent { App(ziel) }
         val fehlt = buildList {
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
             if (Kern.einstellungen.termine) add(Manifest.permission.READ_CALENDAR)
         }.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (Kern.vorschau) return
         if (fehlt.isNotEmpty() && savedInstanceState == null) erlaubnis.launch(fehlt.toTypedArray())
         Hintergrund.planen(this)
     }

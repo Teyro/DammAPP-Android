@@ -23,6 +23,8 @@ object Kern {
     lateinit var app: Context
     lateinit var ablage: Ablage
     private val sperre = Mutex()
+    /** Nur Debug: Beispieldaten für Bildschirmfotos (nichts wird gespeichert oder geladen) */
+    var vorschau = false; private set
 
     var einstellungen by mutableStateOf(Einstellungen()); private set
     var geheim by mutableStateOf(Geheimnisse()); private set
@@ -68,7 +70,7 @@ object Kern {
         Melder.kanaele(app)
     }
 
-    fun aendere(f: (Einstellungen) -> Einstellungen) { einstellungen = f(einstellungen); ablage.speichern(einstellungen) }
+    fun aendere(f: (Einstellungen) -> Einstellungen) { einstellungen = f(einstellungen); if (!vorschau) ablage.speichern(einstellungen) }
     fun aendereGeheim(f: (Geheimnisse) -> Geheimnisse) { geheim = f(geheim); ablage.speichern(geheim) }
 
     // MARK: Abgeleitetes
@@ -91,7 +93,7 @@ object Kern {
     // MARK: Laden
 
     /** Alles neu laden (App öffnen, Ziehen zum Aktualisieren, Hintergrund) */
-    suspend fun aktualisieren(erzwingen: Boolean = false) = sperre.withLock {
+    suspend fun aktualisieren(erzwingen: Boolean = false) = if (vorschau) Unit else sperre.withLock {
         laedt = true
         try { withContext(Dispatchers.IO) { laden(erzwingen) } } finally { laedt = false }
         Schultag.aktualisieren(app)
@@ -127,7 +129,33 @@ object Kern {
         untisLaden(erzwingen)
     }
 
-    suspend fun moduleLaden(erzwingen: Boolean = false) = withContext(Dispatchers.IO) { moduleLadenIntern(erzwingen) }
+    suspend fun moduleLaden(erzwingen: Boolean = false) = if (vorschau) Unit else withContext(Dispatchers.IO) { moduleLadenIntern(erzwingen) }
+
+    fun vorschauDaten() {
+        vorschau = true
+        val heute = Zeit.heute().let { if (Zeit.wochenende(it)) it.plusDays((8 - it.dayOfWeek.value).toLong()) else it }
+        val t = heute.atTime(7, 0)
+        einstellungen = Einstellungen(kuerzel = "Sta", vertretungLink = "https://cloud.example.de/s/Beispiel", haeuser = mapOf("Haus 2" to listOf("2a", "2b", "2c")),
+            unterricht = (1..5).flatMap { d -> listOf(Unterricht(d, "1", "5a", "Mathe", "R12"), Unterricht(d, "4", "6b", "Deutsch", "R7")) },
+            mensa = true, mensaAdresse = "https://kantine.example.de", mensaBenutzer = "x", obst = true, obstKalender = "https://x", abwesenheiten = true, stoerungen = true, aufgaben = true,
+            kachelReihenfolge = Startseite.alle)
+        wetter = Wetter(4.0, 3, WetterTag(61, 8.0, 2.0, 70, 20.0), WetterTag(2, 10.0, 3.0, 10, 15.0), t,
+            (0 until 36).map { i -> val z = t.plusMinutes(15L * i); val m = z.hour * 60 + z.minute; val nass = m in 601..630
+                WetterSchritt(z, if (nass) 63 else 2, 4 + i / 9.0, if (nass) 0.6 else 0.0, if (nass) 80 else 10, 20.0) })
+        vertretung = VertretungsPlan(datum = heute.toString()).apply { stunden.add(VertretungsPlan.Stunde("2", "2c")); pausen.add(VertretungsPlan.Pause("2. Pause", "Mensa + Haltestelle"))
+            alleHinweise.add("Dienstbesprechung um 14 Uhr im Lehrerzimmer") }
+        mensaPlan = MensaPlan(listOf(MensaTag(heute.toString(), mutableListOf(Gericht("Menü 1", "Spaghetti Bolognese", true), Gericht("Menü 2", "Gemüsecurry mit Reis (vegan)")))), 23.40)
+        obstTage = setOf(heute.toString())
+        schulTermine = listOf(SchulKalender.Termin(heute.plusDays(3).toString(), "Elternsprechtag"), SchulKalender.Termin(heute.plusDays(7).toString(), "Laternenumzug"))
+        abwesend = AbwesenheitenStand(listOf(Abwesenheit("Mia Klein", "2b", heute.toString(), heute.toString(), "krank"), Abwesenheit("Ben Groß", "2b", heute.minusDays(1).toString(), heute.plusDays(1).toString(), "entschuldigt")))
+        stoerungen = StoerungenStand(listOf(
+            Stoerung("Beamer flackert", "Der Beamer in der 2b flackert nach 10 Minuten.", "Kim Muster", "", Zeit.jetzt().minusHours(3), "Neu", "Raum 2b", false, true, ""),
+            Stoerung("WLAN im Haus 2 langsam", "", "Alex Beispiel", "IT-Team", Zeit.jetzt().minusDays(1), "In Bearbeitung", "Haus 2", false, false, ""),
+            Stoerung("Drucker Lehrerzimmer Papierstau", "", "Kim Muster", "IT-Team", Zeit.jetzt().minusDays(3), "Erledigt", "Lehrerzimmer", true, false, "")))
+        aufgaben = AufgabenStand(listOf(
+            Aufgabe("1", "Zeugniskonferenz vorbereiten", "Noten bis Freitag eintragen", emptyList(), Zeit.jetzt(), "b", "Klasse 2b", "In Bearbeitung", 2, 0.0, 3),
+            Aufgabe("2", "Elternbrief Laternenumzug", "", emptyList(), Zeit.jetzt(), "b", "Klasse 2b", "Zu erledigen", 1, 1.0, 0)), 2)
+    }
 
     private fun alt(name: String, minuten: Int, erzwingen: Boolean) = erzwingen || System.currentTimeMillis() - ablage.zeit(name) > minuten * 60_000L
 
