@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: JDK 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Gradle cachen
+        uses: gradle/actions/setup-gradle@v3
+      - name: Tests und Debug-APK
+        run: ./gradlew testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DammAPP-debug
+          path: app/build/outputs/apk/debug/*.apk

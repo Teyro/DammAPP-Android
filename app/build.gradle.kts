@@ -1,0 +1,73 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+android {
+    sourceSets["main"].java.srcDirs("../core/src-core", "../core/src-compose")
+    namespace = "de.oejendorferdamm.dammapp"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "de.oejendorferdamm.dammapp"
+        minSdk = 26
+        targetSdk = 34
+        // Version = Datum des Releases: Jahr.Monat.Tag (zweites Release am selben Tag: .1 dahinter)
+        versionName = "26.11.20"
+        versionCode = versionName!!.split(".").map { it.toInt() }.let { p -> p[0] * 1_000_000 + p[1] * 10_000 + p[2] * 100 + p.getOrElse(3) { 0 } }
+        resourceConfigurations += listOf("de")
+    }
+
+    // Wird nur in CI über Umgebungsvariablen gesetzt (siehe .github/workflows/release.yml).
+    val releaseKeystorePfad = System.getenv("RELEASE_KEYSTORE_PATH")
+    signingConfigs {
+        if (releaseKeystorePfad != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePfad)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+                storeType = "PKCS12"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseKeystorePfad != null) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    testOptions { unitTests.isReturnDefaultValues = true }
+}
+
+dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.09.02"))
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-compose:1.9.1")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.glance:glance-material3:1.1.0")
+    implementation("androidx.browser:browser:1.8.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+}

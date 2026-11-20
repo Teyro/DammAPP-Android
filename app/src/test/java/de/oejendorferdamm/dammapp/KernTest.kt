@@ -1,0 +1,79 @@
+package de.oejendorferdamm.dammapp
+
+import de.oejendorferdamm.dammapp.kern.*
+import org.junit.Assert.*
+import org.junit.Test
+import java.time.LocalDate
+import java.time.LocalDateTime
+
+class KernTest {
+    @Test fun totpWieRfc6238() {
+        // RFC 6238, SHA-1, T = 59 s → 94287082 (8 Stellen) → 287082
+        assertEquals("287082", Totp.code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59_000))
+    }
+
+    @Test fun stundenplanMitVertretungUndAufsicht() {
+        val tag = LocalDate.of(2026, 11, 20) // Freitag
+        val u = listOf(Unterricht(5, "1", "5a", "Mathe", "R12"), Unterricht(5, "4", "6b", "Deutsch", "R7"))
+        val v = VertretungsPlan(datum = "2026-11-20").apply { stunden.add(VertretungsPlan.Stunde("2", "2c")); pausen.add(VertretungsPlan.Pause("2. Pause", "Mensa")) }
+        val b = Stundenplan.tag(tag, Schulzeit.standard, u, v, mapOf("Haus 2" to listOf("2c")))
+        assertEquals(listOf("1", "2", "1. Pause", "3", "4", "2. Pause"), b.map { it.name })
+        assertEquals("Vertretung 2c · Haus 2", b[1].text)
+        assertEquals(Block.Art.AUFSICHT, b[5].art)
+        assertEquals(Block.Art.FREI, b[3].art)
+    }
+
+    @Test fun pausenwetterRegenpause() {
+        val t0 = LocalDateTime.of(2026, 11, 20, 10, 0)
+        val w = Wetter(4.0, 61, null, null, t0, listOf(
+            WetterSchritt(t0.plusMinutes(15), 63, 5.0, 0.6, 80, 20.0), WetterSchritt(t0.plusMinutes(30), 63, 5.0, 0.5, 80, 20.0)))
+        val p = w.pause(t0, t0.plusMinutes(25))!!
+        assertTrue(p.drinnen)
+        assertEquals("Regenpause", p.text)
+    }
+
+    @Test fun vertretungsplanLesen() {
+        fun zelle(t: String, w: Int) = """<w:tc><w:tcPr><w:tcW w:w="$w"/></w:tcPr><w:p><w:r><w:t>$t</w:t></w:r></w:p></w:tc>"""
+        val xml = "<w:p><w:t>Freitag, 20.11.2026</w:t></w:p><w:tbl>" +
+            "<w:tr>" + zelle("Klasse", 1000) + zelle("2a", 1000) + zelle("2c", 1000) + "</w:tr>" +
+            "<w:tr>" + zelle("2", 1000) + zelle("", 1000) + zelle("Sta", 1000) + "</w:tr>" +
+            "<w:tr>" + zelle("Es fehlen", 1000) + zelle("Mül, Kra", 2000) + "</w:tr></w:tbl>"
+        val p = Vertretung.auswerten(xml, "Sta")
+        assertEquals("2026-11-20", p.datum)
+        assertEquals(listOf(VertretungsPlan.Stunde("2", "2c")), p.stunden)
+        assertEquals(listOf("Mül", "Kra"), p.fehlen)
+    }
+
+    @Test fun stoerungVerlaufUndFormular() {
+        val html = """<main><div class="comment"><span class="author">Muster, Kim</span><time>19.11.2026 08:15</time><p>Beamer geht nicht.</p></div>
+            <form method="post" action="/iserv/defect/42/comment"><input type="hidden" name="_token" value="abc&amp;1"><textarea name="c[content]"></textarea>
+            <button type="submit" name="c[submit]">Senden</button></form></main>"""
+        val v = Stoerungen.verlaufAus(html, "https://schule.de/iserv/defect/42")
+        assertEquals(listOf("Beamer geht nicht."), v.eintraege.map { it.text })
+        assertEquals("Kim Muster", v.eintraege[0].autor)
+        assertEquals("https://schule.de/iserv/defect/42/comment", v.formular?.aktion)
+        assertEquals("abc&1", v.formular?.felder?.first()?.second)
+    }
+
+    @Test fun edupoolKommentare() {
+        val a = org.json.JSONArray("""[{"id":2,"content":"<p>Danke!</p>","user":{"name":"Kim"},"created_at":"2026-11-20T10:00:00Z"},{"id":1,"content":"Bis Freitag","author_name":"Alex","created_at":"2026-11-19T08:00:00Z"}]""")
+        val k = Aufgaben.kommentareAus(a)
+        assertEquals(listOf("Bis Freitag", "Danke!"), k.map { it.text })
+        assertEquals(listOf("Alex", "Kim"), k.map { it.autor })
+    }
+
+    @Test fun abwesenheitenCsv() {
+        val l = Abwesenheiten.ausCSV("Vorname;Nachname;Klasse;Zeitraum;Status\nMia;Klein;2b;20.11.2026 (08:00 - 10:00);entschuldigt\n")!!
+        assertEquals("Mia Klein", l[0].name)
+        assertEquals("8–10 Uhr", l[0].stunden)
+        assertEquals("entschuldigt", l[0].art)
+    }
+
+    @Test fun einstellungenAlsJson() {
+        val e = de.oejendorferdamm.dammapp.daten.Einstellungen(kuerzel = "Sta", haeuser = mapOf("Haus 1" to listOf("1a")))
+        val zurueck = JSON.decodeFromString<de.oejendorferdamm.dammapp.daten.Einstellungen>(JSON.encodeToString(de.oejendorferdamm.dammapp.daten.Einstellungen.serializer(), e))
+        assertEquals(e, zurueck)
+        // ältere Stände ohne neue Felder
+        assertEquals("Hamburg", JSON.decodeFromString<de.oejendorferdamm.dammapp.daten.Einstellungen>("{\"kuerzel\":\"X\"}").ortName)
+    }
+}

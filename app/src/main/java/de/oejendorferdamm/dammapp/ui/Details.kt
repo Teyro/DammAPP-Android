@@ -1,0 +1,160 @@
+package de.oejendorferdamm.dammapp.ui
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import de.oejendorferdamm.dammapp.daten.Kern
+import de.oejendorferdamm.dammapp.kern.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+
+@Composable
+fun VertretungSeite(zurueck: () -> Unit) {
+    val e = Kern.einstellungen
+    val p = Kern.vertretung
+    Seite("Vertretung", zurueck, untertitel = p?.datum?.let { Zeit.tag(it) }?.let { Zeit.datumLang(it) }) {
+        if (p == null) { item { FehlerText(Kern.vertretungFehler.ifEmpty { "Noch kein Vertretungsplan geladen." }) }; return@Seite }
+        if (p.datum != null && p.datum != Kern.schulTag.toString()) item {
+            Text("⚠️ Für ${Kern.schulTagName} liegt noch kein eigener Plan im Ordner – das ist der nächstliegende.", color = Farben.aufsicht)
+        }
+        item {
+            Karte(Icons.Rounded.Person, Farben.vertretung, "Für dich (${e.kuerzel})") {
+                if (p.fehlt) Text("Du bist als fehlend eingetragen", color = Farben.fehlt, fontWeight = FontWeight.SemiBold)
+                if (p.ausserHaus) Text("Du bist außer Haus eingetragen", color = Farben.aufsicht, fontWeight = FontWeight.SemiBold)
+                if (p.stunden.isEmpty() && p.pausen.isEmpty() && !p.fehlt) Text("✅ Keine Vertretung, keine Aufsicht", color = Farben.gut, fontWeight = FontWeight.Medium)
+                p.stunden.forEach { s ->
+                    val h = Vertretung.haus(s.klasse, e.haeuser)
+                    Zeile(if (s.stunde.toIntOrNull() != null) "${s.stunde}." else s.stunde.take(4), Farben.vertretung, "Vertretung ${s.klasse}",
+                        listOf(if (s.stunde.toIntOrNull() != null) "${s.stunde}. Stunde" else s.stunde, h).filter { it.isNotEmpty() }.joinToString(" · "))
+                }
+                p.pausen.forEach { a -> Zeile(a.pause.take(1) + ".P", Farben.aufsicht, if (a.reserve) "Aufsicht (Reserve)" else "Hofaufsicht", "${a.pause} · ${a.ort}") }
+                p.hinweise.forEach { Text("💬 $it", style = MaterialTheme.typography.bodyMedium) }
+            }
+        }
+        if (p.alleHinweise.isNotEmpty()) item {
+            Karte(Icons.Rounded.Campaign, Color(0xFFF9AB00), "Wichtig (für alle)") { p.alleHinweise.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) } }
+        }
+        if (p.fehlen.isNotEmpty()) item { Karte(Icons.Rounded.PersonOff, Farben.fehlt, "Es fehlen (${p.fehlen.size})") { p.fehlen.forEach { Kollege(it) } } }
+        if (p.ausserListe.isNotEmpty()) item { Karte(Icons.Rounded.DirectionsWalk, Farben.aufsicht, "Außer Haus") { p.ausserListe.forEach { Kollege(it) } } }
+        if (p.aufteilung.isNotEmpty()) item {
+            Karte(Icons.Rounded.CallSplit, Farben.aufsicht, "Aufgeteilte Klassen") {
+                p.aufteilung.toSortedMap().forEach { (std, k) -> Zeile("$std.", Farben.aufsicht, k.joinToString(", "), "$std. Stunde") }
+            }
+        }
+        if (p.datei.isNotEmpty()) item { Text("Datei: ${p.datei.removeSuffix(".docx")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
+private fun Kollege(k: String) {
+    Row { Text(k, fontWeight = FontWeight.Bold, modifier = Modifier.width(64.dp)); Text(Kern.einstellungen.kollegium.entries.firstOrNull { it.key.equals(k, true) }?.value ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+}
+
+/** Stundenplan: Tag (Schultag mit Vertretung), Woche oder Klassen (aus WebUntis) */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StundenplanSeite(zurueck: () -> Unit) {
+    var ansicht by remember { mutableIntStateOf(0) }
+    val e = Kern.einstellungen
+    Seite("Stundenplan", zurueck, aktualisieren = { withContext(Dispatchers.IO) { Kern.untisLaden(true) }; Kern.aktualisieren() }) {
+        item {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf("Schultag", "Woche", "Klassen").forEachIndexed { i, t ->
+                    SegmentedButton(ansicht == i, { ansicht = i }, SegmentedButtonDefaults.itemShape(i, 3)) { Text(t) }
+                }
+            }
+        }
+        if (Kern.untisFehler.isNotEmpty()) item { FehlerText(Kern.untisFehler) }
+        when (ansicht) {
+            0 -> {
+                val tag = Kern.schulTag
+                val jetzt = Zeit.jetzt()
+                item {
+                    Karte(Icons.Rounded.School, Farben.vertretung, Zeit.datumLang(tag)) {
+                        val b = Kern.schultag(tag, ganz = true)
+                        if (b.none { it.meins }) Text("Keine eigenen Stunden eingetragen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else b.forEach { StundenZeile(it, if (it.art == Block.Art.PAUSE || it.art == Block.Art.AUFSICHT) Kern.wetter?.pause(it.von, it.bis) else null, tag == Zeit.heute() && !it.von.isAfter(jetzt) && jetzt.isBefore(it.bis)) }
+                    }
+                }
+            }
+            1 -> {
+                val montag = Zeit.heute().let { if (Zeit.wochenende(it)) it.plusDays(7) else it }.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                items((0..4).map { montag.plusDays(it.toLong()) }) { d ->
+                    val b = Kern.schultag(d).filter { it.zeigen }
+                    Karte(Icons.Rounded.Today, if (d == Zeit.heute()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, Zeit.datumLang(d)) {
+                        val frei = FreieTage.am(Kern.frei, d)
+                        if (frei != null) Text("🏖️ ${frei.name}") else if (b.isEmpty()) Text("Keine Stunden", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else b.forEach { StundenZeile(it, null, false) }
+                    }
+                }
+            }
+            else -> {
+                val st = Kern.untis
+                if (st == null) item { Text(if (e.untisAn) "WebUntis lädt noch …" else "Die Klassen-Übersicht kommt aus WebUntis – in den Einstellungen unter „Schule“ verbinden.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                else items(Untis.klassen(st)) { k ->
+                    Karte(Icons.Rounded.Groups, Farben.vertretung, "Klasse ${k.klasse} · ${k.stunden} Std.") {
+                        Text(k.faecher.joinToString(", ") { "${it.lang.ifEmpty { it.kurz }} (${it.stunden})" }, fontWeight = FontWeight.Medium)
+                        if (k.foerder > 0) Text("Förderkreis: ${k.foerder} Std.", color = Color(0xFF00897B))
+                        if (k.doppel.isNotEmpty()) Text("Zusammen mit: " + k.doppel.joinToString(", ") { name(it) }, style = MaterialTheme.typography.bodyMedium)
+                        if (k.andere.isNotEmpty()) Text("Außerdem in der Klasse: " + k.andere.take(8).joinToString(", ") { "${name(it.kuerzel)} – ${it.faecher.joinToString("/")}" },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun name(k: String) = Kern.einstellungen.kollegium[k]?.let { "$it ($k)" } ?: k
+
+/** Speiseplan: alle geladenen Tage, Lieblingsessen (⭐) und Meiden (👎) per Knopf merken */
+@Composable
+fun MensaSeite(zurueck: () -> Unit) {
+    val e = Kern.einstellungen
+    val uri = LocalUriHandler.current
+    val p = Kern.mensaPlan
+    Seite("Speiseplan", zurueck, untertitel = p?.guthaben?.let { "Guthaben " + "%.2f €".format(it).replace('.', ',') }, aktionen = {
+        if (e.mensaAdresse.isNotEmpty()) IconButton({ runCatching { uri.openUri(e.mensaAdresse) } }) { Icon(Icons.Rounded.ShoppingCart, "Im Portal bestellen") }
+    }) {
+        if (p == null) { item { FehlerText(Kern.mensaFehler.ifEmpty { "Noch kein Speiseplan geladen." }) }; return@Seite }
+        val gut = e.lieblingsGerichte.map(Gericht::schluessel).toSet(); val schlecht = e.nichtLecker.map(Gericht::schluessel).toSet()
+        items(p.tage.filter { it.datum >= Zeit.heute().toString() }) { t ->
+            val d = Zeit.tag(t.datum)
+            Karte(Icons.Rounded.Restaurant, if (t.datum == Kern.schulTag.toString()) Color(0xFF0B8043) else MaterialTheme.colorScheme.outline,
+                d?.let { SchulKalender.datumText(t.datum).replaceFirstChar { c -> c.uppercase() } + if (SchulKalender.datumText(t.datum).length < 8) " · " + Zeit.datumLang(it) else "" } ?: t.datum) {
+                if (t.frei != null) Text("🏖️ Geschlossen" + (t.frei?.takeIf { it.isNotEmpty() }?.let { " – $it" } ?: ""))
+                t.gerichte.forEach { g ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(g.emoji, fontSize = 26.sp); Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(g.text, fontWeight = if (g.bestellt) FontWeight.Bold else FontWeight.Medium)
+                            Text(listOf(g.menue, if (g.bestellt) "bestellt" else "").filter { it.isNotEmpty() }.joinToString(" · ") +
+                                g.merkmale.joinToString("") { " · $it" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconToggleButton(g.schluessel in gut, { an -> Kern.aendere { x -> x.copy(lieblingsGerichte = if (an) (x.lieblingsGerichte + g.text).distinct() else x.lieblingsGerichte.filter { Gericht.schluessel(it) != g.schluessel },
+                            nichtLecker = x.nichtLecker.filter { Gericht.schluessel(it) != g.schluessel }) } }) { Text("⭐", fontSize = 20.sp, modifier = Modifier.alpha(if (g.schluessel in gut) 1f else 0.3f)) }
+                        IconToggleButton(g.schluessel in schlecht, { an -> Kern.aendere { x -> x.copy(nichtLecker = if (an) (x.nichtLecker + g.text).distinct() else x.nichtLecker.filter { Gericht.schluessel(it) != g.schluessel },
+                            lieblingsGerichte = x.lieblingsGerichte.filter { Gericht.schluessel(it) != g.schluessel }) } }) { Text("👎", fontSize = 18.sp, modifier = Modifier.alpha(if (g.schluessel in schlecht) 1f else 0.3f)) }
+                    }
+                }
+            }
+        }
+    }
+}

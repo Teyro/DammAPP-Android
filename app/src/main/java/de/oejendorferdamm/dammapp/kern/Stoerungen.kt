@@ -1,0 +1,173 @@
+@file:kotlinx.serialization.UseSerializers(LDTSerializer::class, LDSerializer::class)
+
+package de.oejendorferdamm.dammapp.kern
+
+import java.time.LocalDate
+import java.time.LocalDateTime
+
+/** Eine Störungsmeldung aus IServ */
+@kotlinx.serialization.Serializable
+data class Stoerung(val titel: String, val inhalt: String, val autor: String, val bearbeiter: String, val datum: LocalDateTime?, val status: String,
+                    val ort: String, val erledigt: Boolean, val unbesetzt: Boolean, val url: String) {
+    val uebernommen get() = !erledigt && (bearbeiter.isNotEmpty() || !unbesetzt)
+    val zustandKurz get() = when {
+        erledigt -> "Erledigt"; bearbeiter.isNotEmpty() -> bearbeiter; uebernommen -> status.ifEmpty { "In Arbeit" }; else -> "Noch niemand"
+    }
+    val schluessel get() = titel + "|" + (datum?.toString() ?: "")
+}
+
+@kotlinx.serialization.Serializable
+
+data class StoerungenStand(val meldungen: List<Stoerung>, val stand: LocalDateTime = Zeit.jetzt()) {
+    val offen get() = meldungen.filter { !it.erledigt }.sortedByDescending { it.datum }
+    val alle get() = meldungen.sortedByDescending { it.datum }
+}
+
+/** Gesprächsverlauf einer Meldung und – falls IServ eins anbietet – das Formular zum Antworten */
+data class StoerungVerlauf(val eintraege: List<Eintrag>, val formular: Formular?) {
+    data class Eintrag(val autor: String, val zeit: String, val text: String)
+    data class Formular(val aktion: String, val felder: List<Pair<String, String>>, val textFeld: String)
+}
+
+object Stoerungen {
+    val modulKandidaten = listOf("/iserv/defect", "/iserv/defect/", "/iserv/defects", "/iserv/troubleticket", "/iserv/ticket")
+    const val MODUL_MUSTER = "st(ö|oe|&ouml;)rung|defect|trouble|ticket"
+    private const val ERLEDIGT = "erledigt|geschlossen|behoben|gel(ö|oe)st|abgeschlossen|closed|resolved|done|fertig"
+    private const val UNBESETZT = "wer mach|niemand|unbearbeitet|^neu$|^offen$|new|open"
+    private val spalten = listOf(
+        "bearbeiter" to "bearbeit|zust(ä|ae)ndig|(ü|ue)bernommen|zugewiesen|verantwortlich|assign|techniker|admin",
+        "autor" to "gemeldet von|erstellt von|eingereicht von|^von$|autor|verfasser|melder|ersteller|absender|benutzer|gemeldet durch",
+        "titel" to "betreff|titel|title|st(ö|oe)rung|problem|bezeichnung|thema|subject|kurzbeschreibung",
+        "inhalt" to "beschreibung|inhalt|nachricht|text|details|fehlerbeschreibung|description|body",
+        "status" to "status|zustand",
+        "ort" to "raum|ort|ger(ä|ae)t|standort|location",
+        "kategorie" to "kategorie|bereich|typ|art$",
+        "aktualisiert" to "aktualisier|ge(ä|ae)ndert|update",
+        "datum" to "datum|erstellt|gemeldet|zeit|eingang|date|created",
+    )
+
+    fun laden(s: IServ, quelle: IServQuelle?): Pair<StoerungenStand, IServQuelle> {
+        if (quelle != null) lesen(s.lade(quelle), quelle.spalten)?.let { return StoerungenStand(it) to quelle }
+        val (q, l) = s.erkunde(MODUL_MUSTER, modulKandidaten) { x, sp -> lesen(x, sp) } ?: throw IServFehler.NichtGefunden("Störungsmeldungen nicht gefunden.")
+        return StoerungenStand(l) to q
+    }
+
+    fun zuordnen(kopf: List<String>): Map<String, Int> {
+        val z = HashMap<String, Int>(); val belegt = HashSet<Int>()
+        for ((feld, m) in spalten) {
+            val i = kopf.indices.firstOrNull { it !in belegt && Regex(m, RegexOption.IGNORE_CASE).containsMatchIn(kopf[it].trim()) } ?: continue
+            z[feld] = i; belegt.add(i)
+        }
+        return z
+    }
+
+    fun meldung(zellen: List<String>, z: Map<String, Int>, link: String): Stoerung? {
+        fun w(f: String) = z[f]?.let { zellen.getOrNull(it)?.trim() } ?: ""
+        val titel = w("titel").ifEmpty { w("inhalt").take(80) }
+        if (titel.isEmpty()) return null
+        val status = w("status")
+        val erledigt = Regex(ERLEDIGT, RegexOption.IGNORE_CASE).containsMatchIn(status)
+        val bearbeiter = if (Regex("^[-–—]$|^(niemand|keine?r?)$", RegexOption.IGNORE_CASE).containsMatchIn(w("bearbeiter"))) "" else w("bearbeiter")
+        return Stoerung(titel, if (z["titel"] != null) w("inhalt") else "", Html.nameSchoen(w("autor")), Html.nameSchoen(bearbeiter), zeit(w("datum")), status, w("ort"),
+            erledigt, !erledigt && (status.isEmpty() || Regex(UNBESETZT, RegexOption.IGNORE_CASE).containsMatchIn(status)), link)
+    }
+
+    fun lesen(s: IServ.Seite, sp: List<String>): List<Stoerung>? {
+        val body = s.body.trim()
+        if (s.typ.lowercase().contains("json") || body.startsWith("{") || body.startsWith("[")) {
+            val zeilen = JsonTabelle.zeilen(body) ?: return null
+            if (sp.isEmpty()) return null
+            val z = zuordnen(sp)
+            if (z["titel"] == null) return null
+            return zeilen.mapNotNull { meldung(it, z, "") }
+        }
+        if (s.typ.lowercase().contains("csv")) {
+            val zeilen = Html.csv(body)
+            zeilen.firstOrNull()?.let { kopf -> val z = zuordnen(kopf); if (z["titel"] != null) return zeilen.drop(1).mapNotNull { meldung(it, z, "") } }
+        }
+        val liste = ArrayList<Stoerung>()
+        for (tab in Html.tabellen(body)) {
+            if (tab.size < 2) continue
+            val z = zuordnen(tab[0].zellen)
+            if (z["titel"] == null || (z["datum"] == null && z["autor"] == null)) continue
+            for (r in tab.drop(1)) if (r.zellen.size >= 2) meldung(r.zellen, z, r.link?.let { Html.absolut(Html.entities(it), s.url) } ?: "")?.let(liste::add)
+        }
+        return liste.ifEmpty { null }
+    }
+
+    /** „12.10.2026, 08:15“, „2026-10-12T…“, „heute 9:30“, „gestern“ */
+    fun zeit(s: String): LocalDateTime? {
+        fun uhr(d: LocalDate): LocalDateTime {
+            val u = Html.erster("""(\d{1,2}:\d{2})""", s)?.let { Zeit.minuten(it) } ?: return d.atStartOfDay()
+            return d.atTime(u / 60, u % 60)
+        }
+        if (Regex("""\d{4}-\d{2}-\d{2}""").containsMatchIn(s)) {
+            runCatching { return java.time.OffsetDateTime.parse(s.trim()).atZoneSameInstant(Zeit.zone).toLocalDateTime() }
+            return Zeit.tag(Html.erster("""(\d{4}-\d{2}-\d{2})""", s) ?: "")?.let { uhr(it) }
+        }
+        if (Regex("""\d{1,2}\.\d{1,2}\.\d{2,4}""").containsMatchIn(s)) Abwesenheiten.datum(s)?.let { Zeit.tag(it) }?.let { return uhr(it) }
+        if (s.contains("heute", true)) return uhr(Zeit.heute())
+        if (s.contains("gestern", true)) return uhr(Zeit.heute().minusDays(1))
+        return null
+    }
+
+    // MARK: Verlauf und Antworten
+
+    private const val EINTRAG = """<(div|li|article|section|tr)\b[^>]*class=["'][^"']*\b(comment|kommentar|reply|antwort|answer|message|nachricht|history|verlauf|activity|timeline-item|post)[^"']*["'][^>]*>"""
+
+    fun verlauf(s: IServ, url: String): StoerungVerlauf {
+        s.hostPruefen(url)
+        val seite = s.lade(IServQuelle(url, "direkt"))
+        return verlaufAus(seite.body, seite.url)
+    }
+
+    /** Antwort über das Formular der Detailseite schicken (nur an IServ selbst) */
+    fun antworten(s: IServ, f: StoerungVerlauf.Formular, text: String) {
+        val host = runCatching { java.net.URL(f.aktion).host.lowercase() }.getOrDefault("")
+        if (!f.aktion.lowercase().startsWith("https:") || host != s.zugang.server) throw IServFehler.Allgemein("Antworten geht nur direkt an IServ.")
+        val felder = f.felder.filter { it.first != f.textFeld } + (f.textFeld to text)
+        val a = s.anfrage(f.aktion, "POST", mapOf("Referer" to f.aktion), felder)
+        if (a.status !in 200..399 || IServ.istLoginSeite(a)) throw IServFehler.Allgemein("Antwort nicht gesendet (HTTP ${a.status}).")
+    }
+
+    fun verlaufAus(html: String, von: String): StoerungVerlauf {
+        val ohneSkript = html.replace(Regex("""<script[\s\S]*?</script>|<style[\s\S]*?</style>|<nav[\s\S]*?</nav>|<header[\s\S]*?</header>|<footer[\s\S]*?</footer>""", RegexOption.IGNORE_CASE), " ")
+        var formular: StoerungVerlauf.Formular? = null
+        for (f in Html.formulare(ohneSkript)) {
+            val ta = Html.erster("""(<textarea\b[^>]*>)""", f) ?: continue
+            if (Html.name(ta).isEmpty()) continue
+            val felder = ArrayList<Pair<String, String>>()
+            for (i in Html.eingaben(f)) {
+                val n = Html.name(i); val t = Html.typ(i)
+                if (n.isEmpty() || t in listOf("submit", "button", "file", "image", "reset")) continue
+                if ((t == "checkbox" || t == "radio") && !Html.hat("""\bchecked\b""", i)) continue
+                felder.add(n to Html.entities(Html.attr(i, "value") ?: ""))
+            }
+            (Html.erster("""(<button\b[^>]*type=["']submit["'][^>]*>)""", f) ?: Html.erster("""(<input\b[^>]*type=["']submit["'][^>]*>)""", f))?.let { k ->
+                if (Html.name(k).isNotEmpty()) felder.add(Html.name(k) to Html.entities(Html.attr(k, "value") ?: ""))
+            }
+            val aktion = Html.entities(Html.attr(Html.erster("""(<form\b[^>]*>)""", f) ?: "", "action") ?: "")
+            formular = StoerungVerlauf.Formular(if (aktion.isEmpty()) von else Html.absolut(aktion, von), felder, Html.name(ta))
+            break
+        }
+        val ohneFormulare = ohneSkript.replace(Regex("""<form[\s\S]*?</form>""", RegexOption.IGNORE_CASE), " ")
+        val starts = Regex(EINTRAG, RegexOption.IGNORE_CASE).findAll(ohneFormulare).map { it.range.first }.toList()
+        val eintraege = ArrayList<StoerungVerlauf.Eintrag>()
+        for ((n, start) in starts.withIndex()) {
+            val ende = if (n + 1 < starts.size) starts[n + 1] else minOf(ohneFormulare.length, start + 6000)
+            val block = ohneFormulare.substring(start, maxOf(start, ende))
+            val autor = Html.text(Html.erster("""class=["'][^"']*\b(?:author|autor|user|username|name|creator)\b[^"']*["'][^>]*>([\s\S]*?)</""", block) ?: "")
+            val zeit = Html.text(Html.erster("""<time\b[^>]*>([\s\S]*?)</time>""", block) ?: Html.erster("""(\d{1,2}\.\d{1,2}\.\d{2,4}(?:,?\s*\d{1,2}:\d{2})?)""", block) ?: "")
+            var text = Html.absatzText(block)
+            for (weg in listOf(autor, zeit)) if (weg.isNotEmpty()) text = text.replace(weg, "")
+            text = text.trim()
+            if (text.isNotEmpty() && eintraege.none { it.text == text }) eintraege.add(StoerungVerlauf.Eintrag(Html.nameSchoen(autor), zeit, text))
+        }
+        if (eintraege.isEmpty()) {
+            val inhalt = Html.erster("""<main\b[^>]*>([\s\S]*?)</main>""", ohneFormulare) ?: Html.erster("""<div[^>]*id=["']content["'][^>]*>([\s\S]*)""", ohneFormulare) ?: ohneFormulare
+            val t = Html.absatzText(inhalt)
+            if (t.isNotEmpty()) eintraege.add(StoerungVerlauf.Eintrag("", "", t.take(8000)))
+        }
+        return StoerungVerlauf(eintraege, formular)
+    }
+}

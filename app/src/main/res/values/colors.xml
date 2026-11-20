@@ -1,0 +1,5 @@
+<resources>
+    <color name="hintergrund">#FFF8F9FF</color>
+    <color name="hintergrund_dunkel">#FF111318</color>
+    <color name="symbol_grund">#FF1E3A5F</color>
+</resources>
