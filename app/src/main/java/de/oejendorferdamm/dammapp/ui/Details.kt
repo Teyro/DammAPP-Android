@@ -135,6 +135,7 @@ fun MensaSeite(zurueck: () -> Unit) {
     }) {
         if (p == null) { item { FehlerText(Kern.mensaFehler.ifEmpty { "Noch kein Speiseplan geladen." }) }; return@Seite }
         val gut = e.lieblingsGerichte.map(Gericht::schluessel).toSet(); val schlecht = e.nichtLecker.map(Gericht::schluessel).toSet()
+        item { Text("⭐ oder 👎 antippen zum Merken, noch einmal antippen zum Abwählen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         items(p.tage.filter { it.datum >= Zeit.heute().toString() }) { t ->
             val d = Zeit.tag(t.datum)
             Karte(Icons.Rounded.Restaurant, if (t.datum == Kern.schulTag.toString()) Color(0xFF0B8043) else MaterialTheme.colorScheme.outline,
@@ -156,5 +157,27 @@ fun MensaSeite(zurueck: () -> Unit) {
                 }
             }
         }
+        item { GemerktKarte() }
+    }
+}
+
+/** Gemerkte Gerichte einzeln abwählen (⭐ Lieblingsessen, 👎 nicht lecker) */
+@Composable
+private fun GemerktKarte() {
+    val e = Kern.einstellungen
+    Karte(Icons.Rounded.Star, Color(0xFFF9AB00), "Gemerkte Gerichte") {
+        if (e.lieblingsGerichte.isEmpty() && e.nichtLecker.isEmpty()) Text("Noch nichts gemerkt.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        e.lieblingsGerichte.forEach { g -> GemerktZeile("⭐", g) { Kern.aendere { x -> x.copy(lieblingsGerichte = x.lieblingsGerichte - g) } } }
+        e.nichtLecker.forEach { g -> GemerktZeile("👎", g) { Kern.aendere { x -> x.copy(nichtLecker = x.nichtLecker - g) } } }
+        if (e.lieblingsGerichte.size + e.nichtLecker.size > 1) TextButton({ Kern.aendere { it.copy(lieblingsGerichte = emptyList(), nichtLecker = emptyList()) } }) {
+            Text("Alle abwählen", color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+@Composable
+private fun GemerktZeile(zeichen: String, text: String, weg: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(zeichen); Spacer(Modifier.width(8.dp)); Text(text, Modifier.weight(1f))
+        IconButton(weg) { Icon(Icons.Rounded.Close, "Abwählen") }
     }
 }
