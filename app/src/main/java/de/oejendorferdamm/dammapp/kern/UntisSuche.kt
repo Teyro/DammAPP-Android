@@ -76,9 +76,11 @@ object UntisRaster {
         val r = raster(zeiten)
         val belegt = r.indices.filter { i -> !r[i].pause && stunden.any { it.von < r[i].bis && it.bis > r[i].von } }
         if (belegt.isEmpty()) return r.filter { it.name != "0" }
+        // wie DammTable: ab der 1. Stunde (die 0. nur, wenn belegt), dann alle Stunden bis zum Schluss
         val eins = r.indexOfFirst { it.name == "1" }.takeIf { it >= 0 } ?: belegt.first()
         val start = minOf(belegt.first(), eins)
-        return r.subList(start, maxOf(belegt.last(), start) + 1)
+        val ende = maxOf(belegt.last(), r.indexOfLast { !it.pause }, start)
+        return r.subList(start, ende + 1)
     }
 
     fun in_(stunden: List<UntisStunde>, datum: String, z: Schulzeit) = stunden.filter { it.datum == datum && it.von < z.bis && it.bis > z.von }

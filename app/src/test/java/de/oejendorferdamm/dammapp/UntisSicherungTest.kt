@@ -62,8 +62,24 @@ class UntisRasterTest {
             de.oejendorferdamm.dammapp.kern.UntisStunde("2026-11-27", 555, 600, "Ma", klassen = emptyList(), lehrer = emptyList()))
         val z = de.oejendorferdamm.dammapp.kern.UntisRaster.zeilen(st, de.oejendorferdamm.dammapp.kern.Schulzeit.standard)
         assertEquals("0", z.first().name)
-        assertEquals("2", z.last().name)
+        assertEquals("6", z.last().name)   // alle Stunden bis zum Schluss
         assertEquals(0, de.oejendorferdamm.dammapp.kern.UntisRaster.in_(st, "2026-11-27", z[1]).size)   // Freitag 1. Stunde frei
         assertEquals("1", de.oejendorferdamm.dammapp.kern.UntisRaster.zeilen(listOf(st[1]), de.oejendorferdamm.dammapp.kern.Schulzeit.standard).first().name)
+    }
+}
+
+class BemerkungenTest {
+    private val absaetze = listOf("Jg 3 Verkehrsunterricht", "4,5 Jährigen Wqx (8:30-13:00); Hox (8:30-11:55)", "FSJ Sofie VSK krank Xyz 4. Std Termin",
+        "FSJ Mira krank Begleitung Lio 1.-4. Abc, 5. Def", "FSJ Ella (Paul) 2c krank Begleitung Kim 1.-3. Xyz, 4. Def")
+
+    @Test
+    fun begleitungUndTermin() {
+        val b = de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Xyz")
+        assertEquals(2, b.size)
+        assertEquals(listOf(4), b[0].stunden); assertEquals("Termin", b[0].was)
+        assertEquals(listOf(1, 2, 3), b[1].stunden); assertEquals("Begleitung Kim", b[1].was); assertEquals("2c", b[1].klasse)
+        assertEquals(listOf(listOf(5), listOf(4)), de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Def").map { it.stunden })
+        assertEquals("8:30–13:00", de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Wqx").first().zeit)
+        assertEquals(0, de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Nix").size)
     }
 }

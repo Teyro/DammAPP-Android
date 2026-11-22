@@ -27,6 +27,8 @@ data class VertretungsPlan(
     var datei: String = "",
     /** Wie viele Zellen im Stundenteil ausgefüllt sind (leere Vorlage = 0) */
     var belegt: Int = 0,
+    /** Bemerkungen aus der „Wichtig“-Zeile für das eigene Kürzel (Begleitung, Termin …) */
+    var bemerkungen: List<Bemerkung> = emptyList(),
 ) {
     @kotlinx.serialization.Serializable
     data class Stunde(val stunde: String, val klasse: String)
@@ -232,7 +234,7 @@ object Vertretung {
             if (t.startsWith("wichtig") && z.size > 1) {
                 val absaetze = treffer("""<w:p[ >][\s\S]*?</w:p>""", z[1].xml, 0).map { text(it) }.filter { it.isNotEmpty() }
                 p.alleHinweise += absaetze
-                if (k.isNotEmpty()) p.hinweise += absaetze.filter { hat(it, k) }
+                if (k.isNotEmpty()) { p.hinweise += absaetze.filter { hat(it, k) }; p.bemerkungen = p.bemerkungen + Bemerkungen.lesen(absaetze, k) }
             }
             val pausen = z.filter { Regex("""^\d\.\s*[Pp]ause$""").matches(it.text) }
             if (pausen.isNotEmpty()) { pausenSpalten = pausen; continue }

@@ -76,18 +76,32 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
     var ansicht by remember { mutableIntStateOf(1) }
     var montag by remember { mutableStateOf(UntisSuche.montag()) }
     var tag by remember { mutableStateOf(Zeit.heute()) }
-    var stunden by remember { mutableStateOf<List<UntisStunde>>(emptyList()) }
+    var roh by remember { mutableStateOf<List<UntisStunde>>(emptyList()) }
     var fehler by remember { mutableStateOf("") }
     var laedt by remember { mutableStateOf(false) }
+    // Vertretungsplan über die Stunden legen (an) oder nur der reine Untis-Plan (aus) – gemerkt
+    val prefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("stundenplaene", android.content.Context.MODE_PRIVATE)
+    var vertretungen by remember { mutableStateOf(prefs.getBoolean("vertretungen", true)) }
     suspend fun laden() {
         laedt = true
         runCatching { withContext(Dispatchers.IO) { Kern.plan(e, montag) } }
-            .onSuccess { stunden = it; fehler = if (it.isEmpty()) "In dieser Woche keine Stunden." else "" }
-            .onFailure { stunden = emptyList(); fehler = it.message ?: "Nicht erreichbar" }
+            .onSuccess { roh = it; fehler = if (it.isEmpty()) "In dieser Woche keine Stunden." else "" }
+            .onFailure { roh = emptyList(); fehler = it.message ?: "Nicht erreichbar" }
         laedt = false
         if (tag.isBefore(montag) || tag.isAfter(montag.plusDays(4))) tag = montag
     }
     LaunchedEffect(montag) { laden() }
+    // mit Vertretungen: wie Untis sie meldet; ohne: der nackte Plan (ursprüngliche Stunden, keine Zusatztermine)
+    val stunden = if (vertretungen) roh else roh.filter { it.code != "irregular" || it.lehrer.isNotEmpty() }.map { it.copy(code = "") }
+    val istIch = e.id == Kern.ichAlsElement?.id
+    fun plan(datum: String) = Kern.vertretung?.takeIf { vertretungen && istIch && it.datum == datum }
+    fun extras(datum: String, z: Schulzeit): List<String> {
+        val p = plan(datum) ?: return emptyList()
+        if (z.pause) return emptyList()
+        val nr = z.name.toIntOrNull() ?: -1
+        return p.stunden.filter { it.stunde.trim('.', ' ') == z.name }.map { "Vertretung ${it.klasse}" } + p.bemerkungen.filter { nr in it.stunden }.map { "📌 " + it.titel }
+    }
+    fun aufsicht(datum: String, z: Schulzeit) = plan(datum)?.takeIf { z.pause }?.pausen?.firstOrNull { it.pause.lowercase().startsWith(z.name.lowercase().take(2)) }?.let { "Aufsicht ${it.ort}" + if (it.reserve) " (Reserve)" else "" }
     val tage = (0..4).map { montag.plusDays(it.toLong()) }
     // Raster wie DammTable (0. Stunde 8:00–8:30 …): jede Stunde in ihrer Zeile, freie bleiben sichtbar frei
     val zeilen = UntisRaster.zeilen(stunden, Kern.einstellungen.schulzeiten)
@@ -95,6 +109,10 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
     val de = Locale.GERMAN
     fun unter(s: UntisStunde) = listOfNotNull(s.klassen.joinToString(", ").takeIf { e.typ != 1 }, s.lehrer.joinToString(", ").takeIf { e.typ != 2 }, s.raum.takeIf { e.typ != 4 }).filter { it.isNotEmpty() }.joinToString(" · ")
     Seite(e.name, zurueck, untertitel = e.lang.ifEmpty { e.art }, aktualisieren = { laden() }, aktionen = {
+        IconButton({ vertretungen = !vertretungen; prefs.edit().putBoolean("vertretungen", vertretungen).apply() }) {
+            Icon(if (vertretungen) Icons.Rounded.SwapHoriz else Icons.Rounded.CalendarMonth, if (vertretungen) "Vertretungen ausblenden (nur Untis-Plan)" else "Vertretungen einblenden",
+                tint = if (vertretungen) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         val fav = Kern.favorit(e)
         IconButton({ Kern.favoritUmschalten(e) }) { Icon(if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, if (fav) "Aus den Favoriten" else "Zu den Favoriten", tint = MaterialTheme.colorScheme.error) }
     }) {
@@ -118,8 +136,27 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                     tage.forEach { d -> FilterChip(d == tag, { tag = d }, { Text(d.format(DateTimeFormatter.ofPattern("EE d.", de))) }) }
                 }
             }
-            items(zeilen.flatMap { z -> if (z.pause) listOf(z to null) else UntisRaster.in_(stunden, tag.toString(), z).ifEmpty { listOf(null) }.map { z to it } }) { (z, s) ->
-                if (z.pause) { Text("☕ ${z.name}", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center); return@items }
+            plan(tag.toString())?.bemerkungen?.filter { it.stunden.isEmpty() }?.forEach { b ->
+                item { Text("📌 " + listOf(b.titel, b.zeit).filter { it.isNotEmpty() }.joinToString(" · "), color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold) }
+            }
+            items(zeilen.flatMap { z ->
+                if (z.pause) listOf(Triple(z, null as UntisStunde?, null as String?))
+                else {
+                    val st = UntisRaster.in_(stunden, tag.toString(), z); val ex = extras(tag.toString(), z)
+                    ex.map { Triple(z, null, it) } + st.map { Triple(z, it, null) } + (if (st.isEmpty() && ex.isEmpty()) listOf(Triple(z, null, null)) else emptyList())
+                }
+            }) { (z, s, extra) ->
+                if (z.pause) { Text("☕ ${z.name}" + (aufsicht(tag.toString(), z)?.let { " · $it" } ?: ""), Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelMedium,
+                    color = if (aufsicht(tag.toString(), z) != null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center); return@items }
+                if (extra != null) {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text("${nr(z)} · ${Zeit.hhmm(z.von)}", Modifier.width(96.dp))
+                            Text(extra, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    return@items
+                }
                 if (s == null) {
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -158,7 +195,7 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                         }
                     }
                     zeilen.forEach { z ->
-                        if (z.pause) Text(z.name, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)).padding(vertical = 1.dp),
+                        if (z.pause) Text(z.name + (tage.firstNotNullOfOrNull { aufsicht(it.toString(), z) }?.let { " · $it" } ?: ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)).padding(vertical = 1.dp),
                             fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         else Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Top) {
                             Column(Modifier.width(34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -167,7 +204,12 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                             }
                             tage.forEach { d ->
                                 val hier = UntisRaster.in_(stunden, d.toString(), z)
-                                if (hier.isEmpty())
+                                val mehr = extras(d.toString(), z)
+                                if (hier.isEmpty() && mehr.isNotEmpty())
+                                    Box(Modifier.weight(1f).heightIn(min = 50.dp).background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(10.dp)).padding(4.dp), contentAlignment = Alignment.Center) {
+                                        Text(mehr.joinToString("\n"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                    }
+                                else if (hier.isEmpty())
                                     Box(Modifier.weight(1f).heightIn(min = 50.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                                         Text("frei", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                                     }
@@ -179,6 +221,7 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                                             Text(s.fach, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textDecoration = if (s.entfaellt) TextDecoration.LineThrough else null)
                                             Text(unter(s), fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                         }
+                                        mehr.forEach { Text(it, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary, maxLines = 2, lineHeight = 11.sp) }
                                     }
                                 }
                             }
