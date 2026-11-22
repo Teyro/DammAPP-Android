@@ -149,7 +149,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.schule() {
     val x = Kern.einstellungen
     gruppe("Vertretungsplan", "Cloud-Ordner mit den Word-Dateien des Vertretungsplans. Gelesen wird nur, was für dein Kürzel drinsteht. Häuser je Zeile, z. B. „Haus 1: 1a, 1b, 2a“.") {
         Schalter("Vertretungsplan zeigen", x.vertretung) { an -> e { it.copy(vertretung = an) } }
-        Feld("Dein Kürzel", x.kuerzel) { v -> e { it.copy(kuerzel = v.trim()) } }
+        Feld("Dein Kürzel im Vertretungsplan", x.kuerzel) { v -> e { it.copy(kuerzel = v.trim()) } }
+        Feld("Kürzel in Untis, falls anders", x.untisKuerzel) { v -> e { it.copy(untisKuerzel = v.trim()) } }
         Feld("Freigabe-Link des Ordners", x.vertretungLink, tastatur = KeyboardType.Uri) { v -> e { it.copy(vertretungLink = v.trim()) } }
         Feld("Passwort der Freigabe (falls nötig)", Kern.geheim.freigabe, geheim = true) { v -> g { it.copy(freigabe = v) } }
         Feld("Häuser", Vertretung.text(x.haeuser), mehrzeilig = true) { v -> e { it.copy(haeuser = Vertretung.haeuser(v)) } }

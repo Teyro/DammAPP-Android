@@ -95,12 +95,14 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
     // mit Vertretungen: wie Untis sie meldet; ohne: der nackte Plan (ursprüngliche Stunden, keine Zusatztermine)
     val stunden = if (vertretungen) roh else roh.filter { it.code != "irregular" || it.lehrer.isNotEmpty() }.map { it.copy(code = "") }
     val istIch = e.id == Kern.ichAlsElement?.id
-    fun plan(datum: String) = Kern.vertretung?.takeIf { vertretungen && istIch && it.datum == datum }
+    fun plan(datum: String) = Kern.vertretung?.takeIf { vertretungen && it.datum == datum }
+    // Bemerkungen (Begleitung …): eigene – oder die jeder anderen Lehrkraft aus der ganzen „Wichtig“-Zeile
+    fun bemerkungen(datum: String) = plan(datum)?.let { p -> if (istIch) p.bemerkungen else if (e.typ == 2) de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(p.alleHinweise, e.name) else emptyList() }.orEmpty()
     fun extras(datum: String, z: Schulzeit): List<String> {
         val p = plan(datum) ?: return emptyList()
         if (z.pause) return emptyList()
         val nr = z.name.toIntOrNull() ?: -1
-        return p.stunden.filter { it.stunde.trim('.', ' ') == z.name }.map { "Vertretung ${it.klasse}" } + p.bemerkungen.filter { nr in it.stunden }.map { "📌 " + it.titel }
+        return (if (istIch) p.stunden.filter { it.stunde.trim('.', ' ') == z.name }.map { "Vertretung ${it.klasse}" } else emptyList()) + bemerkungen(datum).filter { nr in it.stunden }.map { "📌 " + it.titel }
     }
     // Aufsicht in der Pause (Vertretungsplan des Tages): eigene – oder die der Lehrkraft, deren Plan das ist
     fun aufsicht(datum: String, z: Schulzeit): String? {
@@ -152,7 +154,7 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                     tage.forEach { d -> FilterChip(d == tag, { tag = d }, { Text(d.format(DateTimeFormatter.ofPattern("EE d.", de))) }) }
                 }
             }
-            plan(tag.toString())?.bemerkungen?.filter { it.stunden.isEmpty() }?.forEach { b ->
+            bemerkungen(tag.toString()).filter { it.stunden.isEmpty() }.forEach { b ->
                 item { Text("📌 " + listOf(b.titel, b.zeit).filter { it.isNotEmpty() }.joinToString(" · "), color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold) }
             }
             items(zeilen.flatMap { z ->

@@ -22,6 +22,8 @@ data class Einstellungen(
     val vertretung: Boolean = true,
     val vertretungLink: String = "",
     val kuerzel: String = "",
+    /** Kürzel in Untis, falls es anders heißt (z. B. „Geo“ statt „Gri“) – leer = wie im Vertretungsplan */
+    val untisKuerzel: String = "",
     val haeuser: Map<String, List<String>> = emptyMap(),
     val kollegium: Map<String, String> = emptyMap(),
     val vertretungMelden: Boolean = false,
@@ -78,6 +80,8 @@ data class Einstellungen(
     /** Material You: Farben aus dem Hintergrundbild (Android 12+); aus = DammAPP-Blau */
     val dynamischeFarben: Boolean = true,
 ) {
+    /** Name, unter dem man in Untis steht */
+    val untisName get() = untisKuerzel.ifEmpty { kuerzel.ifEmpty { untisBenutzer } }
     val mensaBereit get() = mensa && mensaAdresse.isNotEmpty() && mensaBenutzer.isNotEmpty()
     val obstBereit get() = obst && obstKalender.isNotEmpty()
     val klassenListe get() = abwesendKlassen.split(Regex("[,; ]+")).filter { it.isNotEmpty() }

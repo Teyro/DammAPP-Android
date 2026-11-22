@@ -115,7 +115,7 @@ object Kern {
     private var untisSuche: de.oejendorferdamm.dammapp.kern.UntisSuche? = null
     private var sicherungText: String? = null
 
-    val ichAlsElement get() = (einstellungen.kuerzel.ifEmpty { einstellungen.untisBenutzer }).takeIf { it.isNotEmpty() }?.let { de.oejendorferdamm.dammapp.kern.UntisElement(2, it, "Mein Stundenplan") }
+    val ichAlsElement get() = einstellungen.untisName.takeIf { it.isNotEmpty() }?.let { de.oejendorferdamm.dammapp.kern.UntisElement(2, it, "Mein Stundenplan") }
     fun favorit(e: de.oejendorferdamm.dammapp.kern.UntisElement) = untisFavoriten.any { it.id == e.id }
     fun favoritUmschalten(e: de.oejendorferdamm.dammapp.kern.UntisElement) {
         untisFavoriten = if (favorit(e)) untisFavoriten.filter { it.id != e.id } else untisFavoriten + e
@@ -281,7 +281,7 @@ object Kern {
         val e = einstellungen; val g = geheim
         if (!e.untisAn || e.untisLink.isEmpty() || (g.untisPasswort.isEmpty() && g.untisSchluessel.isEmpty() && Untis.qr(e.untisLink) == null)) return
         if (!alt("untis", 360, erzwingen)) return
-        val kuerzel = e.kuerzel.ifEmpty { e.untisBenutzer }
+        val kuerzel = e.untisName
         val st = runCatching { Untis.laden(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase(), kuerzel) }
             .onSuccess { untisFehler = "" }
             .getOrElse { fehler ->

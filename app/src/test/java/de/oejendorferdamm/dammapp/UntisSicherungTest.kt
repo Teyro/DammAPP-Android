@@ -82,6 +82,21 @@ class BemerkungenTest {
         assertEquals("8:30–13:00", de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Wqx").first().zeit)
         assertEquals(0, de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Nix").size)
     }
+
+    /** Schreibweisen aus echten Plänen vom 18.–20.11.2026 (Namen und Kürzel geändert) */
+    @Test
+    fun echteSchreibweisen() {
+        val l = { a: List<String>, k: String -> de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(a, k).map { Triple(it.was, it.klasse, it.stunden) } }
+        val fr = listOf("SCP – Beratung 8:00-10:00", "FSJ Lola ab 11:00 da; FSJ Ali 2c krank; FSJ Mia 4a krank, FSJ Ella 2c krank-> Begleitung Kim: 1. Abc, 2.-4. Xyz, 5. Abc",
+            "SB Tom 2a/3b krank -> V SB Ben;      SB Jan 2a->Begleitung Lio:1.Xyz ,2.+3.Def, 4.Hox, 5.Xyz", "Begleitung Mo 2c: 1. Hox, 2.-4. Abc")
+        assertEquals(listOf(Triple("Begleitung Kim", "2c", listOf(2, 3, 4)), Triple("Begleitung Lio", "2a", listOf(1, 5))), l(fr, "Xyz"))
+        assertEquals(listOf(Triple("Begleitung Kim", "2c", listOf(1, 5)), Triple("Begleitung Mo", "2c", listOf(2, 3, 4))), l(fr, "Abc"))
+        val mi = listOf("Begleitungen: Tim: 1.,.2Wqx, 3.,4.Def, 5.Abc", "Emil: 1.Hox, 2.Abc, 3.Hox, 4.,5.Wqx", "Kim: 1.Xyz, 2.,3.Def, 4.,5.Xyz  ")
+        assertEquals(listOf(Triple("Begleitung Kim", "", listOf(1, 4, 5))), l(mi, "Xyz"))
+        assertEquals(listOf(Triple("Begleitung Tim", "", listOf(1, 2)), Triple("Begleitung Emil", "", listOf(4, 5))), l(mi, "Wqx"))
+        val don = listOf("Xyz 2.-4. Lio (2c)FSJ Sofie (VSK) krank", "FSJ Elli (2c)  Begleitung Kim: 1. Wqx, 2.+3. Def, 4.?, 5. Xyz")
+        assertEquals(listOf(Triple("Begleitung Lio", "2c", listOf(2, 3, 4)), Triple("Begleitung Kim", "2c", listOf(5))), l(don, "Xyz"))
+    }
 }
 
 class AufsichtenTest {
