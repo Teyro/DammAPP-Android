@@ -94,4 +94,6 @@ data class Geheimnisse(
     val ha: String = "",
     val untisPasswort: String = "",
     val untisSchluessel: String = "",
+    /** Passwort der Freigabe „Schul-Ordner“ – für die Untis-Sicherung, wenn WebUntis ausfällt */
+    val schulOrdner: String = "",
 )

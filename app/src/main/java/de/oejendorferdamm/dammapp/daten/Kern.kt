@@ -213,12 +213,25 @@ object Kern {
         val e = einstellungen; val g = geheim
         if (!e.untisAn || e.untisLink.isEmpty() || (g.untisPasswort.isEmpty() && g.untisSchluessel.isEmpty() && Untis.qr(e.untisLink) == null)) return
         if (!alt("untis", 360, erzwingen)) return
-        runCatching { Untis.laden(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase(), e.kuerzel.ifEmpty { e.untisBenutzer }) }
-            .onSuccess { st ->
-                untis = st; untisFehler = ""; ablage.schreib("untis", st); ablage.zeit("untis", System.currentTimeMillis())
-                if (e.untisUebernehmen) { val neu = Untis.unterricht(st, e.schulzeiten); if (neu.isNotEmpty() && neu.map { it.copy(id = "") } != e.unterricht.map { it.copy(id = "") }) aendere { it.copy(unterricht = neu) } }
-            }
-            .onFailure { untisFehler = it.message ?: "WebUntis nicht erreichbar" }
+        val kuerzel = e.kuerzel.ifEmpty { e.untisBenutzer }
+        val st = runCatching { Untis.laden(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase(), kuerzel) }
+            .onSuccess { untisFehler = "" }
+            .getOrElse { fehler ->
+                // WebUntis fällt aus: die tägliche Untis-Sicherung aus dem Schul-Ordner
+                val s = if (g.schulOrdner.isNotEmpty()) runCatching { UntisSicherung.lesen(UntisSicherung.laden(g.schulOrdner), kuerzel) }.getOrNull() else null
+                untisFehler = if (s != null) "WebUntis nicht erreichbar – Stand aus der Untis-Sicherung vom " + s.stand.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm")) + "."
+                    else fehler.message ?: "WebUntis nicht erreichbar"
+                s
+            } ?: return
+        untis = st; ablage.schreib("untis", st); ablage.zeit("untis", System.currentTimeMillis())
+        if (e.untisUebernehmen) {
+            // Rangfolge: von Hand Eingetragenes bleibt, Untis füllt freie Stunden und pflegt nur seine eigenen Einträge
+            val neu = Untis.unterricht(st, e.schulzeiten)
+            val vorher = ablage.lies<List<Unterricht>>("untisUnterricht") ?: e.unterricht
+            val zusammen = UntisSicherung.zusammenfuehren(e.unterricht, neu, vorher)
+            if (neu.isNotEmpty() && zusammen.map { it.copy(id = "") } != e.unterricht.map { it.copy(id = "") }) aendere { it.copy(unterricht = zusammen) }
+            ablage.schreib("untisUnterricht", neu)
+        }
     }
 
     // MARK: Aktionen

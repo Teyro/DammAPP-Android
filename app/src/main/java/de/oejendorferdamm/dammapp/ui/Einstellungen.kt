@@ -159,7 +159,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.schule() {
         Schalter("5 Minuten vor der Hofaufsicht erinnern", x.aufsichtErinnern) { an -> e { it.copy(aufsichtErinnern = an) } }
         Schalter("„Mitnehmen“ (Sportzeug, Regenjacke …)", x.mitnehmen) { an -> e { it.copy(mitnehmen = an) } }
     }
-    gruppe("WebUntis", "In WebUntis auf deinen Namen → Freigaben → „Zugriff über Untis Mobile“ → Anzeigen. Url, Schule, Benutzer und Schlüssel abtippen – damit klappt es auch mit zweitem Faktor, ohne Passwort.") {
+    gruppe("WebUntis", "In WebUntis auf deinen Namen → Freigaben → „Zugriff über Untis Mobile“ → Anzeigen. Url, Schule, Benutzer und Schlüssel abtippen – damit klappt es auch mit zweitem Faktor, ohne Passwort. Von Hand Eingetragenes bleibt – Untis füllt nur freie Stunden. Fällt WebUntis aus, nimmt die App die tägliche Untis-Sicherung aus dem Schul-Ordner.") {
         Schalter("WebUntis verbinden", x.untisAn) { an -> e { it.copy(untisAn = an) } }
         if (x.untisAn) {
             Feld("Url (z. B. hh5586.webuntis.com)", x.untisLink, tastatur = KeyboardType.Uri) { v -> e { it.copy(untisLink = v.trim()) } }
@@ -168,6 +168,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.schule() {
             Feld("Schlüssel (aus Untis Mobile)", Kern.geheim.untisSchluessel, geheim = true) { v -> g { it.copy(untisSchluessel = v) } }
             Feld("… oder Passwort (ohne zweiten Faktor)", Kern.geheim.untisPasswort, geheim = true) { v -> g { it.copy(untisPasswort = v) } }
             Schalter("Grundwoche als meinen Stundenplan übernehmen", x.untisUebernehmen) { an -> e { it.copy(untisUebernehmen = an) } }
+            Feld("Schul-Ordner-Passwort (Untis-Sicherung)", Kern.geheim.schulOrdner, geheim = true) { v -> g { it.copy(schulOrdner = v) } }
             val scope = rememberCoroutineScope()
             FilledTonalButton({ scope.launch { withContext(Dispatchers.IO) { Kern.untisLaden(true) }; Kern.meldung = Kern.untisFehler.ifEmpty { "WebUntis geladen: ${Kern.einstellungen.unterricht.size} Stunden" } } }) { Text("Jetzt laden") }
             FehlerText(Kern.untisFehler)
