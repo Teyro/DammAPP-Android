@@ -66,3 +66,20 @@ class UntisSuche private constructor(private val s: Untis.Sitzung, val elemente:
 
     fun schliessen() { runCatching { s.rufe("logout") } }
 }
+
+/** Raster wie in DammTable: 0. Stunde 8:00–8:30 (Frühförderung) vor den Schulzeiten */
+object UntisRaster {
+    fun raster(zeiten: List<Schulzeit>) = listOf(Schulzeit("0", 480, 510)) + zeiten.filter { it.name != "0" }
+
+    /** Zeilen einer Woche: ab der 1. Stunde (die 0. nur, wenn belegt) bis zur letzten belegten Stunde, Pausen dazwischen */
+    fun zeilen(stunden: List<UntisStunde>, zeiten: List<Schulzeit>): List<Schulzeit> {
+        val r = raster(zeiten)
+        val belegt = r.indices.filter { i -> !r[i].pause && stunden.any { it.von < r[i].bis && it.bis > r[i].von } }
+        if (belegt.isEmpty()) return r.filter { it.name != "0" }
+        val eins = r.indexOfFirst { it.name == "1" }.takeIf { it >= 0 } ?: belegt.first()
+        val start = minOf(belegt.first(), eins)
+        return r.subList(start, maxOf(belegt.last(), start) + 1)
+    }
+
+    fun in_(stunden: List<UntisStunde>, datum: String, z: Schulzeit) = stunden.filter { it.datum == datum && it.von < z.bis && it.bis > z.von }
+}
