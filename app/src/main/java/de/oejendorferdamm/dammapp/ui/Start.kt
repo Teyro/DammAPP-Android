@@ -100,7 +100,7 @@ private fun SchulKarte(oeffne: (Bereich) -> Unit) {
 @Composable
 private fun MensaKarte(oeffne: (Bereich) -> Unit) {
     val e = Kern.einstellungen
-    Karte(Icons.Rounded.Restaurant, Color(0xFF0B8043), "Mensa " + Kern.schulTagName, onClick = { oeffne(Bereich.MENSA) },
+    Karte(Icons.Rounded.Restaurant, Color(0xFF0B8043), "Mensa " + Kern.essenTagName, onClick = { oeffne(Bereich.MENSA) },
         rechts = { Kern.mensaPlan?.guthaben?.let { Text("%.2f €".format(it).replace('.', ','), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) } }) {
         val t = Kern.mensaTag
         when {

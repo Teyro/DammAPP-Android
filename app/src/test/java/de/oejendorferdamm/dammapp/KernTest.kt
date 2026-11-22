@@ -23,6 +23,13 @@ class KernTest {
         assertEquals(Block.Art.FREI, b[3].art)
     }
 
+    @Test fun essenFreitagnachmittagNaechsteWoche() {
+        val fr = { h: Int -> LocalDateTime.of(2026, 11, 20, h, 0) } // Freitag
+        assertEquals(LocalDate.of(2026, 11, 20), Tagwahl.ziel(fr(13), ab = Tagwahl.ESSEN_STUNDE))
+        assertEquals(LocalDate.of(2026, 11, 23), Tagwahl.ziel(fr(14), ab = Tagwahl.ESSEN_STUNDE))
+        assertEquals(LocalDate.of(2026, 11, 20), Tagwahl.ziel(fr(14))) // Schule bleibt bis 16 Uhr
+    }
+
     @Test fun pausenwetterRegenpause() {
         val t0 = LocalDateTime.of(2026, 11, 20, 10, 0)
         val w = Wetter(4.0, 61, null, null, t0, listOf(

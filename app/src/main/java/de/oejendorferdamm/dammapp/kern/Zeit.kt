@@ -92,9 +92,11 @@ object FreieTage {
 /** Welcher Schultag gezeigt wird: heute, ab 16 Uhr der nächste (ohne Wochenende und freie Tage) */
 object Tagwahl {
     const val UMSCHALT_STUNDE = 16
-    fun ziel(jetzt: LocalDateTime = Zeit.jetzt(), frei: List<FreierTag> = emptyList()): LocalDate {
+    /** Speiseplan schaltet schon nach dem Mittag um – freitags damit auf die nächste Woche */
+    const val ESSEN_STUNDE = 14
+    fun ziel(jetzt: LocalDateTime = Zeit.jetzt(), frei: List<FreierTag> = emptyList(), ab: Int = UMSCHALT_STUNDE): LocalDate {
         var d = jetzt.toLocalDate()
-        if (jetzt.hour >= UMSCHALT_STUNDE) d = d.plusDays(1)
+        if (jetzt.hour >= ab) d = d.plusDays(1)
         repeat(30) {
             if (!Zeit.wochenende(d) && FreieTage.am(frei, d) == null) return d
             d = d.plusDays(1)

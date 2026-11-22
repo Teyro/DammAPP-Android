@@ -136,9 +136,9 @@ fun MensaSeite(zurueck: () -> Unit) {
         if (p == null) { item { FehlerText(Kern.mensaFehler.ifEmpty { "Noch kein Speiseplan geladen." }) }; return@Seite }
         val gut = e.lieblingsGerichte.map(Gericht::schluessel).toSet(); val schlecht = e.nichtLecker.map(Gericht::schluessel).toSet()
         item { Text("⭐ oder 👎 antippen zum Merken, noch einmal antippen zum Abwählen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(p.tage.filter { it.datum >= Zeit.heute().toString() }) { t ->
+        items(p.tage.filter { it.datum >= Kern.essenTag.toString() }) { t ->
             val d = Zeit.tag(t.datum)
-            Karte(Icons.Rounded.Restaurant, if (t.datum == Kern.schulTag.toString()) Color(0xFF0B8043) else MaterialTheme.colorScheme.outline,
+            Karte(Icons.Rounded.Restaurant, if (t.datum == Kern.essenTag.toString()) Color(0xFF0B8043) else MaterialTheme.colorScheme.outline,
                 d?.let { SchulKalender.datumText(t.datum).replaceFirstChar { c -> c.uppercase() } + if (SchulKalender.datumText(t.datum).length < 8) " · " + Zeit.datumLang(it) else "" } ?: t.datum) {
                 if (t.frei != null) Text("🏖️ Geschlossen" + (t.frei?.takeIf { it.isNotEmpty() }?.let { " – $it" } ?: ""))
                 t.gerichte.forEach { g ->

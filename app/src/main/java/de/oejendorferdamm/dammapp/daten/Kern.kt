@@ -84,7 +84,10 @@ object Kern {
     fun ausfall(tag: LocalDate) = untis?.meine?.filter { it.datum == tag.toString() && it.entfaellt && it.bis > it.von }?.map { it.von..it.bis } ?: emptyList()
     fun schultag(tag: LocalDate = schulTag, ganz: Boolean = false) = Stundenplan.tag(tag, einstellungen.schulzeiten, einstellungen.unterricht, vertretung, einstellungen.haeuser, ausfall(tag), ganz)
     val heuteBloecke get() = if (freiHeute == null && !Zeit.wochenende(Zeit.heute())) schultag(Zeit.heute()) else emptyList()
-    val mensaTag get() = mensaPlan?.tag(schulTag.toString())
+    /** Tag fürs Essen: bis 14 Uhr heute, danach der nächste Schultag (Freitagnachmittag = Montag) */
+    val essenTag: LocalDate get() = Tagwahl.ziel(Zeit.jetzt(), frei, Tagwahl.ESSEN_STUNDE)
+    val essenTagName get() = Tagwahl.name(essenTag)
+    val mensaTag get() = mensaPlan?.tag(essenTag.toString())
     val obstSchultag get() = einstellungen.obstBereit && schulTag.toString() in obstTage
     val wetterSchultag get() = if (schulTag == Zeit.heute()) wetter?.heute else wetter?.morgen
     val mitnehmen get() = if (einstellungen.mitnehmen) Mitnehmen.hinweise(schultag(), wetterSchultag) else emptyList()
@@ -182,7 +185,7 @@ object Kern {
         }
         when (val r = m.await()) {
             null -> { mensaFehler = if (e.mensa && g.mensa.isEmpty()) "Kantinen-Passwort fehlt" else if (!mensaErlaubt) "Kantinen-Zugang wurde abgelehnt – bitte Benutzer oder Passwort prüfen" else "" }
-            else -> r.onSuccess { p -> mensaPlan = p; ablage.schreib("mensa", p); mensaFehler = if (p.tag(ziel) == null) "Für $schulTagName steht nichts im Speiseplan" else ""; ablage.text("mensaAbgelehnt", null) }
+            else -> r.onSuccess { p -> mensaPlan = p; ablage.schreib("mensa", p); mensaFehler = if (p.tag(essenTag.toString()) == null) "Für $essenTagName steht nichts im Speiseplan" else ""; ablage.text("mensaAbgelehnt", null) }
                 .onFailure { x -> mensaFehler = x.message ?: "Kantine nicht erreichbar"; if (x is Mensa.Anmeldung) ablage.text("mensaAbgelehnt", Mensa.merkmal(e.mensaBenutzer, g.mensa)) }
         }
         o.await()?.let { obstTage = it; ablage.schreib("obst", it) }
