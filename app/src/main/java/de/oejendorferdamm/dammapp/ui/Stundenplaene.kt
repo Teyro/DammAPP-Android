@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,7 +102,22 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
         val nr = z.name.toIntOrNull() ?: -1
         return p.stunden.filter { it.stunde.trim('.', ' ') == z.name }.map { "Vertretung ${it.klasse}" } + p.bemerkungen.filter { nr in it.stunden }.map { "📌 " + it.titel }
     }
-    fun aufsicht(datum: String, z: Schulzeit) = plan(datum)?.takeIf { z.pause }?.pausen?.firstOrNull { it.pause.lowercase().startsWith(z.name.lowercase().take(2)) }?.let { "Aufsicht ${it.ort}" + if (it.reserve) " (Reserve)" else "" }
+    // Aufsicht in der Pause (Vertretungsplan des Tages): eigene – oder die der Lehrkraft, deren Plan das ist
+    fun aufsicht(datum: String, z: Schulzeit): String? {
+        if (!z.pause || !vertretungen) return null
+        val p = Kern.vertretung?.takeIf { it.datum == datum } ?: return null
+        val liste = if (istIch) p.pausen else if (e.typ == 2) p.alleAufsichten[e.name.lowercase()].orEmpty() else emptyList()
+        return liste.firstOrNull { it.pause.lowercase().startsWith(z.name.lowercase().take(2)) }?.let { "Aufsicht ${it.ort}" + if (it.reserve) " (Reserve)" else "" }
+    }
+    // Fachfarbe wie in DammTable; heute schon gelaufen = ausgegraut
+    val akzent = MaterialTheme.colorScheme.primary
+    fun fachFarbe(s: UntisStunde): androidx.compose.ui.graphics.Color =
+        if (s.entfaellt) androidx.compose.ui.graphics.Color.Gray else de.oejendorferdamm.dammapp.kern.Fachfarbe.hex(s.fach, s.fachLang)?.let(::hexFarbe) ?: akzent
+    fun vorbei(s: UntisStunde): Boolean {
+        val heute = Zeit.heute().toString()
+        if (s.datum != heute) return s.datum < heute
+        val j = java.time.LocalTime.now(); return j.hour * 60 + j.minute >= s.bis
+    }
     val tage = (0..4).map { montag.plusDays(it.toLong()) }
     // Raster wie DammTable (0. Stunde 8:00–8:30 …): jede Stunde in ihrer Zeile, freie bleiben sichtbar frei
     val zeilen = UntisRaster.zeilen(stunden, Kern.einstellungen.schulzeiten)
@@ -166,9 +182,12 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                     }
                     return@items
                 }
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-                        Column(Modifier.width(56.dp), horizontalAlignment = Alignment.End) {
+                ElevatedCard(Modifier.fillMaxWidth().alpha(if (vorbei(s)) 0.4f else 1f),
+                    colors = CardDefaults.elevatedCardColors(containerColor = if (vorbei(s)) MaterialTheme.colorScheme.surfaceVariant else fachFarbe(s).copy(alpha = 0.16f))) {
+                    Row(Modifier.padding(14.dp).height(IntrinsicSize.Min), verticalAlignment = Alignment.Top) {
+                        Box(Modifier.width(6.dp).fillMaxHeight().background(if (vorbei(s)) androidx.compose.ui.graphics.Color.Gray else fachFarbe(s), RoundedCornerShape(3.dp)))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.width(48.dp), horizontalAlignment = Alignment.End) {
                             Text(nr(z), fontWeight = FontWeight.Bold)
                             Text(Zeit.hhmm(s.von), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -215,8 +234,10 @@ private fun PlanSeite(e: UntisElement, zurueck: () -> Unit) {
                                     }
                                 else {
                                     val s0 = hier[0]
-                                    val farbe = if (s0.entfaellt) MaterialTheme.colorScheme.surfaceVariant else if (s0.code == "irregular") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
-                                    Column(Modifier.weight(1f).heightIn(min = 50.dp).background(farbe, RoundedCornerShape(10.dp)).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    val alt = hier.all { vorbei(it) }
+                                    val farbe = if (alt || s0.entfaellt) MaterialTheme.colorScheme.surfaceVariant else if (s0.code == "irregular") MaterialTheme.colorScheme.tertiaryContainer else fachFarbe(s0).copy(alpha = 0.28f)
+                                    Column(Modifier.weight(1f).heightIn(min = 50.dp).alpha(if (alt) 0.45f else 1f).background(farbe, RoundedCornerShape(10.dp))
+                                        .border(1.5.dp, if (alt) androidx.compose.ui.graphics.Color.Transparent else fachFarbe(s0).copy(alpha = 0.7f), RoundedCornerShape(10.dp)).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                         hier.forEach { s ->
                                             Text(s.fach, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textDecoration = if (s.entfaellt) TextDecoration.LineThrough else null)
                                             Text(unter(s), fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)

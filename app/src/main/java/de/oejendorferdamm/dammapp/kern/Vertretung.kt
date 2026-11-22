@@ -29,6 +29,8 @@ data class VertretungsPlan(
     var belegt: Int = 0,
     /** Bemerkungen aus der „Wichtig“-Zeile für das eigene Kürzel (Begleitung, Termin …) */
     var bemerkungen: List<Bemerkung> = emptyList(),
+    /** Aufsichten aller Lehrkräfte aus den Pausenzeilen: Kürzel (klein) → Pausen – für die Pläne der anderen */
+    val alleAufsichten: MutableMap<String, MutableList<Pause>> = mutableMapOf(),
 ) {
     @kotlinx.serialization.Serializable
     data class Stunde(val stunde: String, val klasse: String)
@@ -240,8 +242,18 @@ object Vertretung {
             if (pausen.isNotEmpty()) { pausenSpalten = pausen; continue }
             val sp = pausenSpalten
             if (sp != null) {
-                if (k.isEmpty()) continue
                 val ort = z.lastOrNull { it.bis <= sp[0].von + 5 && it.text.isNotEmpty() }?.text ?: ""
+                // alle Kürzel dieser Zeile merken (für die Stundenpläne der anderen)
+                for (s in sp) {
+                    val c = z.firstOrNull { it.mitte >= s.von && it.mitte < s.bis && it.text.isNotEmpty() } ?: continue
+                    val name = s.text.replace(Regex("\\s+"), " ")
+                    for (teil in c.text.split(',', ';', '/', '+', ' ')) {
+                        val kz = teil.trim { !it.isLetter() }
+                        if (kz.length !in 2..5 || !kz.all(Char::isLetter)) continue
+                        p.alleAufsichten.getOrPut(kz.lowercase()) { mutableListOf() }.add(VertretungsPlan.Pause(name, ort, teil.contains("(")))
+                    }
+                }
+                if (k.isEmpty()) continue
                 for (s in sp) {
                     val c = z.firstOrNull { it.mitte >= s.von && it.mitte < s.bis } ?: continue
                     if (!hat(c.text, k)) continue

@@ -83,3 +83,18 @@ class BemerkungenTest {
         assertEquals(0, de.oejendorferdamm.dammapp.kern.Bemerkungen.lesen(absaetze, "Nix").size)
     }
 }
+
+class AufsichtenTest {
+    @Test
+    fun alleAufsichtenAusDenPausenzeilen() {
+        fun tc(t: String) = "<w:tc><w:tcPr><w:tcW w:w=\"1000\"/></w:tcPr><w:p><w:r><w:t>$t</w:t></w:r></w:p></w:tc>"
+        fun tr(vararg z: String) = "<w:tr>" + z.joinToString("") + "</w:tr>"
+        val xml = "<w:document><w:body><w:p><w:r><w:t>Freitag, 27.11.2026</w:t></w:r></w:p><w:tbl>" +
+            tr(tc("Klasse"), tc("4a"), tc("4b")) + tr(tc("1"), tc("Xyz"), tc("")) + tr(tc(""), tc("Wichtig!"), tc("1. Pause"), tc("2. Pause")) +
+            tr(tc(""), tc("Mensa + Haltestelle"), tc("Abc"), tc("Xyz+4")) + tr(tc(""), tc("Fußballplatz"), tc("(Def)"), tc("Abc")) + "</w:tbl></w:body></w:document>"
+        val p = de.oejendorferdamm.dammapp.kern.Vertretung.auswerten(xml, "Xyz")
+        assertEquals(listOf("Mensa + Haltestelle", "Fußballplatz"), p.alleAufsichten["abc"]!!.map { it.ort })
+        assertEquals(true, p.alleAufsichten["def"]!!.first().reserve)
+        assertEquals("Mensa + Haltestelle", p.pausen.first().ort)
+    }
+}

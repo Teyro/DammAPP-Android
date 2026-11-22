@@ -85,3 +85,24 @@ object UntisRaster {
 
     fun in_(stunden: List<UntisStunde>, datum: String, z: Schulzeit) = stunden.filter { it.datum == datum && it.von < z.bis && it.bis > z.von }
 }
+
+/** Fachfarben wie auf den Fach-Karten in DammTable: Deutsch rot, Mathe blau, Sachunterricht grün … ("#rrggbb" oder null) */
+object Fachfarbe {
+    fun hex(fach: String, lang: String = ""): String? {
+        val t = "$fach $lang".lowercase()
+        fun hat(vararg w: String) = w.any { it in t }
+        val k = fach.lowercase().filter(Char::isLetter)
+        return when {
+            k in setOf("d", "dv", "dz", "de", "deu") || hat("deutsch", "daz", "lesen", "schreib") -> "#E53935"
+            k in setOf("m", "ma", "mat") || hat("mathe") -> "#1E88E5"
+            k in setOf("su", "sach") || hat("sachunterricht", "sachkunde") -> "#43A047"
+            k in setOf("e", "en", "eng") || hat("englisch") -> "#FB8C00"
+            k == "mu" || hat("musik") -> "#8E24AA"
+            k in setOf("sp", "spa", "schw") || hat("sport", "schwimm", "turn") -> "#00ACC1"
+            k in setOf("bku", "ku", "kunst") || hat("kunst") -> "#D81B60"
+            k in setOf("rel", "re", "phil") || hat("religion", "philosoph") -> "#8D6E63"
+            hat("förder", "foerder") -> "#00897B"
+            else -> null
+        }
+    }
+}
