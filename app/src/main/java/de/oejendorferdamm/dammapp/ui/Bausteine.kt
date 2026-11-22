@@ -1,6 +1,8 @@
 package de.oejendorferdamm.dammapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -160,3 +162,38 @@ fun AntwortFeld(text: String, onText: (String) -> Unit, sendet: Boolean, senden:
 fun FehlerText(t: String) {
     if (t.isNotEmpty()) Text("⚠️ $t", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
 }
+
+/** Farbe aus „#rrggbb“ (sonst grau) */
+fun hexFarbe(hex: String): androidx.compose.ui.graphics.Color =
+    de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(hex).toLongOrNull(16)?.let { androidx.compose.ui.graphics.Color(0xFF000000 or it) } ?: androidx.compose.ui.graphics.Color.Gray
+
+/** Feste Farbe aus einem Namen (gleicher Name = gleiche Farbe) */
+fun namensFarbe(name: String): androidx.compose.ui.graphics.Color {
+    val palette = listOf(0xFF1E88E5, 0xFF43A047, 0xFFFB8C00, 0xFF8E24AA, 0xFFD81B60, 0xFF00897B, 0xFF3949AB, 0xFF6D4C41, 0xFF00ACC1, 0xFF7CB342)
+    return androidx.compose.ui.graphics.Color(palette[Math.floorMod(name.lowercase().hashCode(), palette.size)])
+}
+
+/** Kartenfarbe für Edupool: „Alle“ (keine Farbe = jede Karte) oder eine Farbe von den Boards, dazu frei als #rrggbb */
+@Composable
+fun FarbWahl(farbe: String, farben: List<String>, setzen: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Welche Karten gehören dir?", style = MaterialTheme.typography.bodyMedium)
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { FilterChip(farbe.isBlank(), { setzen("") }, { Text("Alle") }) }
+            val liste = (farben + listOfNotNull(farbe.takeIf { it.isNotBlank() })).distinctBy { de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(it) }
+            items(liste.size) { i ->
+                val f = liste[i]
+                val an = de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(f) == de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(farbe)
+                Box(Modifier.size(36.dp).kreisFarbe(hexFarbe(f), an).clickable { setzen(f) }, contentAlignment = Alignment.Center) {
+                    if (an) Icon(Icons.Rounded.Check, "gewählt", tint = androidx.compose.ui.graphics.Color.White)
+                }
+            }
+        }
+        var eigen by remember(farbe) { mutableStateOf(farbe) }
+        OutlinedTextField(eigen, { eigen = it; setzen(it.trim()) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("oder #rrggbb (leer = alle Karten)") })
+    }
+}
+
+private fun Modifier.kreisFarbe(farbe: androidx.compose.ui.graphics.Color, an: Boolean) = this
+    .background(farbe, androidx.compose.foundation.shape.CircleShape)
+    .border(if (an) 3.dp else 1.dp, if (an) androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.7f) else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)

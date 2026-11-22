@@ -229,7 +229,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.iserv() {
             Kern.geheim.edupool.isEmpty() -> Button({ scope.launch { Kern.edupoolVerbinden { zeigen(it) } } }) { Text("Mit Edupool Boards verbinden") }
             else -> {
                 Schalter("Aufgaben zeigen", x.aufgaben) { an -> e { it.copy(aufgaben = an) } }
-                Feld("Kartenfarbe deiner Aufgaben", x.aufgabenFarbe) { v -> e { it.copy(aufgabenFarbe = v.trim()) } }
+                FarbWahl(x.aufgabenFarbe, Kern.aufgaben?.farben.orEmpty()) { v -> e { it.copy(aufgabenFarbe = v.trim()) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton({ scope.launch { Kern.edupoolVerbinden { zeigen(it) } } }) { Text("Neu verbinden") }
                     TextButton({ g { it.copy(edupool = "") }; e { it.copy(aufgaben = false) }; Kern.aufgaben = null }) { Text("Trennen", color = MaterialTheme.colorScheme.error) }
@@ -288,6 +288,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.ort() {
 private fun androidx.compose.foundation.lazy.LazyListScope.ueber() {
     gruppe("DammAPP für Android") {
         Text("Version ${BuildConfig.VERSION_NAME}")
+        Kern.updateNeu?.let { Text("Neue Version $it ist da.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall) }
         val c = LocalContext.current
         val scope = rememberCoroutineScope()
         var stand by remember { mutableStateOf("") }

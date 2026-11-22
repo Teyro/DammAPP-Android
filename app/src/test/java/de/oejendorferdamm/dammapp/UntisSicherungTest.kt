@@ -32,3 +32,25 @@ class UntisSicherungTest {
         assertNull(UntisSicherung.lesen(json, "xyz"))
     }
 }
+
+class UntisSucheTest {
+    private val json = """{"faecher":[{"name":"Ma","lang":"Mathe"}],"klassen":[{"name":"2b","lang":""}],"lehrer":[{"name":"Sta","lang":"Anna Stark"}],
+      "plaene":{"klassen":{"2b":[{"datum":"2026-11-23","von":"08:30","bis":"09:15","faecher":["Ma"],"lehrer":["Sta"],"raeume":["R1"],"klassen":["2b"]}]},"lehrer":{}}}"""
+
+    @Test
+    fun elementeUndPlanAusSicherung() {
+        val e = de.oejendorferdamm.dammapp.kern.UntisSuche.elemente(json)
+        assertEquals(listOf("2b", "Sta"), e.map { it.name })
+        val p = de.oejendorferdamm.dammapp.kern.UntisSuche.plan(json, e[0])
+        assertEquals(1, p.size)
+        assertEquals("Mathe", p[0].fachLang)
+    }
+
+    @Test
+    fun personenFarbe() {
+        val f = mapOf("Anna Stark" to "#ff0000", "Ben Kurz" to "#00ff00")
+        assertEquals("#ff0000", de.oejendorferdamm.dammapp.kern.Aufgaben.farbeFuer("anna stark", f))
+        assertEquals("#00ff00", de.oejendorferdamm.dammapp.kern.Aufgaben.farbeFuer("Herr Kurz", f))
+        assertNull(de.oejendorferdamm.dammapp.kern.Aufgaben.farbeFuer("Niemand", f))
+    }
+}

@@ -16,7 +16,7 @@ data class Aufgabe(val id: String, val titel: String, val beschreibung: String, 
 
 @kotlinx.serialization.Serializable
 
-data class AufgabenStand(val aufgaben: List<Aufgabe>, val boards: Int, val stand: LocalDateTime = Zeit.jetzt()) {
+data class AufgabenStand(val aufgaben: List<Aufgabe>, val boards: Int, val stand: LocalDateTime = Zeit.jetzt(), val farben: List<String> = emptyList()) {
     val offen get() = aufgaben.filter { !Aufgaben.kategorien[it.kategorie].erledigt }
     fun gruppen(wichtigZuerst: Boolean = false): List<Pair<Int, List<Aufgabe>>> {
         val reihe = Aufgaben.kategorien.indices.toMutableList()
@@ -76,12 +76,15 @@ object Aufgaben {
         val (bd, _) = anfrage("/api/boards", token = token)
         val boards = liste(bd).mapNotNull { b -> if (!b.has("id")) null else Triple(b.get("id").toString(), b.optString("title").ifEmpty { b.optString("name").ifEmpty { "Board ${b.get("id")}" } }, b.optString("layout_type")) }
             .filter { it.third == "kanban" }
-        val ziel = farbNorm(farbe)
+        val ziel = farbNorm(farbe)   // leer = keine Farbe gewählt → alle Karten
         val aufgaben = ArrayList<Aufgabe>()
+        val farben = sortedSetOf<String>()
         for ((id, titel, _) in boards.take(MAX_BOARDS)) {
             val spalten = liste(anfrage("/api/sections/board/$id", token = token).first).associate { it.opt("id").toString() to it.optString("title") }
             for (k in liste(anfrage("/api/cards/board/$id", token = token).first)) {
-                if (farbNorm(k.optString("color")) != ziel) continue
+                val f = farbNorm(k.optString("color"))
+                if (f.isNotEmpty()) farben.add("#$f")
+                if (ziel.isNotEmpty() && f != ziel) continue
                 val spalte = spalten[k.opt("section_id")?.toString() ?: ""] ?: ""
                 val kat = kategorie(spalte)
                 if (kat < 0 || !k.has("id")) continue
@@ -92,7 +95,37 @@ object Aufgaben {
                     id, titel, spalte, kat, k.optDouble("sort_index", 0.0), anzahl))
             }
         }
-        return AufgabenStand(aufgaben, boards.size)
+        return AufgabenStand(aufgaben, boards.size, farben = farben.toList())
+    }
+
+    /** Wer welche Farbe hat – aus dem Board „Medien“: Mitglieder mit Farbe, sonst die Farbe der Karten, denen jemand zugewiesen ist */
+    fun personenFarben(token: String, titel: String = "Medien"): Map<String, String> = runCatching {
+        val b = liste(anfrage("/api/boards", token = token).first).firstOrNull { it.optString("title").ifEmpty { it.optString("name") }.contains(titel, true) } ?: return emptyMap()
+        val id = b.opt("id")?.toString() ?: return emptyMap()
+        val m = LinkedHashMap<String, String>()
+        fun nimm(personen: Any?, farbe: String? = null) {
+            val a = personen as? org.json.JSONArray ?: return
+            for (i in 0 until a.length()) {
+                val p = a.optJSONObject(i) ?: continue
+                val u = p.optJSONObject("user") ?: p
+                val n = listOf("display_name", "name", "username").map { u.optString(it) }.firstOrNull { it.isNotEmpty() } ?: continue
+                val f = farbNorm(p.optString("color").ifEmpty { p.optString("colour").ifEmpty { u.optString("color").ifEmpty { farbe ?: "" } } })
+                if (f.isNotEmpty()) m.putIfAbsent(n, "#$f")
+            }
+        }
+        nimm(b.opt("members") ?: b.opt("users"))
+        (anfrage("/api/boards/$id", token = token).first as? JSONObject)?.let { o -> nimm(o.opt("members") ?: o.opt("users") ?: o.opt("participants")) }
+        for (k in liste(anfrage("/api/cards/board/$id", token = token).first)) nimm(k.opt("assignees") ?: k.opt("assigned_users") ?: k.opt("members"), k.optString("color"))
+        m
+    }.getOrDefault(emptyMap())
+
+    /** Farbe zu einem Namen: exakt, dann ein Namensteil (z. B. Nachname) */
+    fun farbeFuer(name: String, farben: Map<String, String>): String? {
+        val n = name.trim().lowercase()
+        if (n.isEmpty()) return null
+        farben.entries.firstOrNull { it.key.lowercase() == n }?.let { return it.value }
+        val teile = n.split(Regex("[^\\p{L}]+")).filter { it.length >= 3 }.toSet()
+        return farben.entries.firstOrNull { (k, _) -> k.lowercase().split(Regex("[^\\p{L}]+")).any { it in teile } }?.value
     }
 
     // MARK: Kommentare

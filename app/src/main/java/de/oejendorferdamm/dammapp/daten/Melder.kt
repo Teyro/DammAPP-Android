@@ -21,11 +21,13 @@ object Melder {
     const val KANAL_DRINGEND = "vertretung_dringend"
     const val KANAL_SCHULTAG = "schultag"
     const val KANAL_AUFSICHT = "aufsicht"
+    const val KANAL_UPDATE = "update"
 
     fun kanaele(c: Context) {
         val nm = c.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(KANAL, "Neuigkeiten (Störungen, Aufgaben, Vertretung)", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(KANAL_DRINGEND, "Vertretungsplan (dringend)", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(KANAL_UPDATE, "Neue Version von DammAPP", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(KANAL_AUFSICHT, "Erinnerung vor der Hofaufsicht", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel(KANAL_SCHULTAG, "Schultag (was gerade läuft)", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
     }

@@ -42,6 +42,7 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
         IconButton({ oeffne(Bereich.EINSTELLUNGEN) }) { Icon(Icons.Rounded.Settings, "Einstellungen") }
     }, unten = {
         BottomAppBar(actions = {
+            IconButton({ oeffne(Bereich.UNTIS) }) { Icon(Icons.Rounded.ManageSearch, "Stundenpläne suchen") }
             TextButton({ Sprecher.sprechen(c, Kern.briefing()) }) { Icon(Icons.Rounded.RecordVoiceOver, null); Spacer(Modifier.width(6.dp)); Text("Briefing") }
             if (Kern.ha.eingerichtet) TextButton({ scope.launch { val t = Kern.guteNacht(); Kern.meldung = t; Sprecher.sprechen(c, t) } }) {
                 Icon(Icons.Rounded.Bedtime, null); Spacer(Modifier.width(6.dp)); Text("Gute Nacht") }

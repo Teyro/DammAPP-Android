@@ -8,6 +8,7 @@ import de.oejendorferdamm.dammapp.kern.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -64,6 +65,7 @@ object Kern {
         einstellungen = ablage.einstellungen()
         geheim = ablage.geheim()
         wetter = ablage.lies("wetter"); frei = ablage.lies("frei") ?: emptyList(); vertretung = ablage.lies("vertretung")
+        personenFarben = ablage.lies("personenFarben") ?: emptyMap()
         untis = ablage.lies("untis"); mensaPlan = ablage.lies("mensa"); obstTage = ablage.lies("obst") ?: emptySet()
         schulTermine = ablage.lies("schultermine") ?: emptyList()
         abwesend = ablage.lies("abwesend"); stoerungen = ablage.lies("stoerungen"); aufgaben = ablage.lies("aufgaben")
@@ -100,7 +102,67 @@ object Kern {
         de.oejendorferdamm.dammapp.widget.Widgets.aktualisieren(app)
     }
 
+    // MARK: Stundenpläne anderer
+
+    var untisFavoriten by mutableStateOf<List<de.oejendorferdamm.dammapp.kern.UntisElement>>(emptyList())
+    var untisElemente by mutableStateOf<List<de.oejendorferdamm.dammapp.kern.UntisElement>>(emptyList())
+    var untisSucheHinweis by mutableStateOf("")
+    /** Farben der Personen (Board „Medien“) für die Blasen im Störungsverlauf */
+    var personenFarben by mutableStateOf<Map<String, String>>(emptyMap())
+    private var untisSuche: de.oejendorferdamm.dammapp.kern.UntisSuche? = null
+    private var sicherungText: String? = null
+
+    val ichAlsElement get() = (einstellungen.kuerzel.ifEmpty { einstellungen.untisBenutzer }).takeIf { it.isNotEmpty() }?.let { de.oejendorferdamm.dammapp.kern.UntisElement(2, it, "Mein Stundenplan") }
+    fun favorit(e: de.oejendorferdamm.dammapp.kern.UntisElement) = untisFavoriten.any { it.id == e.id }
+    fun favoritUmschalten(e: de.oejendorferdamm.dammapp.kern.UntisElement) {
+        untisFavoriten = if (favorit(e)) untisFavoriten.filter { it.id != e.id } else untisFavoriten + e
+        ablage.schreib("untisFavoriten", untisFavoriten)
+    }
+
+    private fun sicherung(): String? = sicherungText ?: geheim.schulOrdner.takeIf { it.isNotEmpty() }?.let { runCatching { UntisSicherung.laden(it) }.getOrNull() }?.also { sicherungText = it }
+
+    /** Liste aller Klassen, Lehrkräfte und Räume: aus WebUntis, sonst aus der Untis-Sicherung (läuft im Hintergrund-Thread) */
+    fun untisSucheVorbereiten(neu: Boolean = false) {
+        if (untisFavoriten.isEmpty()) untisFavoriten = ablage.lies("untisFavoriten") ?: emptyList()
+        if (untisElemente.isNotEmpty() && !neu) return
+        val e = einstellungen; val g = geheim
+        runCatching { de.oejendorferdamm.dammapp.kern.UntisSuche.oeffnen(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase()) }
+            .onSuccess { untisSuche = it; untisElemente = it.elemente; untisSucheHinweis = "" }
+            .onFailure { f ->
+                val d = sicherung()
+                if (d != null) { untisElemente = de.oejendorferdamm.dammapp.kern.UntisSuche.elemente(d); untisSucheHinweis = "WebUntis nicht erreichbar – Pläne aus der Untis-Sicherung (nur diese und nächste Woche, keine Räume)." }
+                else untisSucheHinweis = f.message ?: "WebUntis nicht erreichbar"
+            }
+    }
+
+    /** Plan eines Elements für Mo–Fr ab [montag] (Hintergrund-Thread) */
+    fun plan(e: de.oejendorferdamm.dammapp.kern.UntisElement, montag: LocalDate): List<UntisStunde> {
+        untisSuche?.let { s -> runCatching { return s.plan(e, montag) } }
+        if (untisSuche == null) untisSucheVorbereiten(neu = true)
+        untisSuche?.let { return it.plan(e, montag) }
+        val d = sicherung() ?: throw Exception(untisSucheHinweis.ifEmpty { "WebUntis nicht erreichbar." })
+        val von = montag.toString(); val bis = montag.plusDays(4).toString()
+        return de.oejendorferdamm.dammapp.kern.UntisSuche.plan(d, e).filter { it.datum in von..bis }
+    }
+
+    /** Neue Version auf GitHub (für den Hinweis in den Einstellungen) */
+    var updateNeu by mutableStateOf<String?>(null)
+
+    /** Wie in allen Damm-Apps: höchstens alle 6 Stunden und nur außerhalb der Stunden suchen; neue Version einmal melden */
+    private suspend fun updateSuchen() {
+        if (!alt("update", 360, false) || !de.oejendorferdamm.dammapp.update.UpdateZeit.erlaubt()) return
+        ablage.zeit("update", System.currentTimeMillis())
+        val i = de.oejendorferdamm.dammapp.update.Update.pruefen() ?: return
+        if (!de.oejendorferdamm.dammapp.update.Update.istNeuer(i.version, de.oejendorferdamm.dammapp.BuildConfig.VERSION_NAME)) { updateNeu = null; return }
+        updateNeu = i.version
+        if (ablage.text("updateGemeldet") != i.version) {
+            ablage.text("updateGemeldet", i.version)
+            Melder.melde(app, "update", "DammAPP ${i.version} ist da", "Tippen zum Installieren (Einstellungen → DammAPP für Android → Nach Update suchen).", "einstellungen", kanal = Melder.KANAL_UPDATE)
+        }
+    }
+
     private suspend fun laden(erzwingen: Boolean) = coroutineScope {
+        launch { runCatching { updateSuchen() } }
         val e = einstellungen; val g = geheim
         val ziel = schulTag.toString()
         val w = async { runCatching { Wetter.laden(e.lat, e.lon) }.getOrNull() }
@@ -201,7 +263,10 @@ object Kern {
             }
         }
         if (e.aufgaben && geheim.edupool.isNotEmpty() && alt("aufgaben", 30, erzwingen)) runCatching { Aufgaben.laden(geheim.edupool, e.aufgabenFarbe) }
-            .onSuccess { aufgaben = it; aufgabenFehler = ""; ablage.schreib("aufgaben", it); ablage.zeit("aufgaben", System.currentTimeMillis()) }
+            .onSuccess {
+                aufgaben = it; aufgabenFehler = ""; ablage.schreib("aufgaben", it); ablage.zeit("aufgaben", System.currentTimeMillis())
+                Aufgaben.personenFarben(geheim.edupool).takeIf { pf -> pf.isNotEmpty() }?.let { pf -> personenFarben = pf; ablage.schreib("personenFarben", pf) }
+            }
             .onFailure { aufgabenFehler = it.message ?: "Edupool nicht erreichbar" }
         if (e.mitteilungen || e.vertretungMelden || e.vertretungDa) Melder.pruefen(app, ablage,
             if (e.mitteilungen && e.stoerungen) stoerungen else null, if (e.mitteilungen && e.aufgaben) aufgaben else null,

@@ -166,7 +166,7 @@ object Untis {
         return Qr(host, schule, q["user"] ?: "", q["key"] ?: "")
     }
 
-    private class Sitzung(val basis: String, val schule: String) {
+    internal class Sitzung(val basis: String, val schule: String) {
         val url = basis + "/WebUntis/jsonrpc.do?school=" + java.net.URLEncoder.encode(schule, "UTF-8")
         var nr = 0
         var cookie = ""
@@ -215,7 +215,7 @@ object Untis {
         }
     }
 
-    private fun zahl(d: LocalDate) = d.year * 10000 + d.monthValue * 100 + d.dayOfMonth
+    internal fun zahl(d: LocalDate) = d.year * 10000 + d.monthValue * 100 + d.dayOfMonth
 
     /** Eigene Stunden (diese und nächste Woche) und die Pläne meiner Klassen laden */
     fun laden(link: String, schule: String = "", benutzer: String, passwort: String, schluessel: String = "", kuerzel: String, jetzt: LocalDate = Zeit.heute()): UntisStand {

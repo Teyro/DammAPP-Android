@@ -159,17 +159,24 @@ private fun StoerungDetail(m: Stoerung) {
                 Text("Verlauf", style = MaterialTheme.typography.titleSmall)
                 val v = verlauf
                 if (v == null && fehler.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text("Lade Verlauf …") }
+                // Jeder Kommentar eine Blase wie im Chat: Technik rechts, alle anderen links; Farbe je Person aus dem Board „Medien“
                 v?.eintraege?.forEach { e ->
                     val technik = m.bearbeiter.isNotEmpty() && e.autor.isNotEmpty() && (e.autor.contains(m.bearbeiter, true) || m.bearbeiter.contains(e.autor, true))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start) {
-                        Surface(color = if (technik) Farben.vertretung.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.fillMaxWidth(0.88f)) {
-                            Column(Modifier.padding(12.dp)) {
+                    val farbe = Aufgaben.farbeFuer(e.autor, Kern.personenFarben)?.let(::hexFarbe) ?: namensFarbe(e.autor)
+                    val initialen = e.autor.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase().ifEmpty { "?" }
+                    val kreis = @Composable { Box(Modifier.size(30.dp).clip(CircleShape).background(farbe), contentAlignment = Alignment.Center) {
+                        Text(initialen, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) } }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
+                        if (!technik) { kreis(); Spacer(Modifier.width(8.dp)) }
+                        Surface(color = farbe.copy(alpha = 0.16f), shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
+                            modifier = Modifier.fillMaxWidth(0.82f)) {
+                            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 if (e.autor.isNotEmpty() || e.zeit.isNotEmpty()) Text(listOf(e.autor, e.zeit).filter { it.isNotEmpty() }.joinToString(" · "),
-                                    style = MaterialTheme.typography.labelMedium, color = if (technik) Farben.vertretung else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    style = MaterialTheme.typography.labelMedium, color = farbe, fontWeight = FontWeight.SemiBold)
                                 Text(e.text, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
+                        if (technik) { Spacer(Modifier.width(8.dp)); kreis() }
                     }
                 }
                 if (v != null && v.formular == null) Text("Antworten geht für diese Meldung nur in IServ.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
