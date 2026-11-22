@@ -292,7 +292,7 @@ object Kern {
         if (e.untisUebernehmen) {
             // Rangfolge: von Hand Eingetragenes bleibt, Untis füllt freie Stunden und pflegt nur seine eigenen Einträge
             val neu = Untis.unterricht(st, e.schulzeiten)
-            val vorher = ablage.lies<List<Unterricht>>("untisUnterricht") ?: e.unterricht
+            val vorher = ablage.lies<List<Unterricht>>("untisUnterricht") ?: emptyList()
             val zusammen = UntisSicherung.zusammenfuehren(e.unterricht, neu, vorher)
             if (neu.isNotEmpty() && zusammen.map { it.copy(id = "") } != e.unterricht.map { it.copy(id = "") }) aendere { it.copy(unterricht = zusammen) }
             ablage.schreib("untisUnterricht", neu)
