@@ -276,7 +276,7 @@ object Vertretung {
                 if (c.text.isEmpty() || !hat(c.text, k)) continue
                 val ueber = kopf.filter { it.von < c.bis && it.bis > c.von }
                 // Zeile über alle Klassen (Frühbetreuung Mensa) → keine Klasse
-                val klasse = if (ueber.size > kopf.size / 2) "" else if (ueber.size > 1) "${ueber.first().text}–${ueber.last().text}" else (kopf.firstOrNull { c.mitte >= it.von && c.mitte < it.bis }?.text ?: "")
+                val klasse = if (ueber.size >= 4 && ueber.size > kopf.size / 2) "" else if (ueber.size > 1) "${ueber.first().text}–${ueber.last().text}" else (kopf.firstOrNull { c.mitte >= it.von && c.mitte < it.bis }?.text ?: "")
                 if (p.stunden.none { it.stunde == titel && it.klasse == klasse }) p.stunden.add(VertretungsPlan.Stunde(titel, klasse))
             }
         }
