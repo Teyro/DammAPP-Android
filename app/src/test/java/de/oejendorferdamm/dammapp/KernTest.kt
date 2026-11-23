@@ -83,4 +83,29 @@ class KernTest {
         // ältere Stände ohne neue Felder
         assertEquals("Hamburg", JSON.decodeFromString<de.oejendorferdamm.dammapp.daten.Einstellungen>("{\"kuerzel\":\"X\"}").ortName)
     }
+
+    /** Montag, 23.11.2026 (echter Plan): Frühbetreuung Mensa +Sta, „Begleitung Nelson 1. FSJ Abdul, 2.Schu, 3.-5. Sta“ */
+    @Test fun fruehUndBegleitung() {
+        val tag = LocalDate.of(2026, 11, 23)
+        val u = mutableListOf(Unterricht(1, "3", "4a", "Mathe"), Unterricht(1, "0", "VSK", "Frühförderung"))
+        val v = VertretungsPlan(datum = "2026-11-23").apply { stunden.add(VertretungsPlan.Stunde("Frühbetreuung Mensa", "")) }
+        v.bemerkungen = Bemerkungen.lesen(listOf("Begleitung Leon 2c: 1. Schu, Mal 2.-4.  FSJ Sophia VSK krank;          FSJ Lola 1b krank;          FSJ Nehir 1c krank;   FSJ Sude 1c Seminar-> Begleitung Roan 1. Mad, 2. Brü, 3. Mey            Begleitung Emir 1a: 3.+4. Bal  FSJ Ellie 2c Seminar-> Begleitung Nelson 1. FSJ Abdul, 2.Schu, 3.-5. Sta  FSJ Elmira krank 1b: SB Meggy 1.-5. Begleitung Emir"), "Sta")
+        assertEquals(listOf(3, 4, 5), v.bemerkungen.first().stunden)
+        val b = Stundenplan.tag(tag, Schulzeit.standard, u, v, ganz = true)
+        assertEquals("0", b.first().name); assertEquals("Frühbetreuung Mensa", b.first().text); assertEquals("VSK Frühförderung", b.first().ersetzt)
+        val drei = b.first { it.name == "3" }
+        assertEquals("2c → Nelson", drei.text); assertEquals("4a Mathe", drei.ersetzt); assertEquals(Block.Art.VERTRETUNG, drei.art)
+        assertEquals("2c → Nelson", b.first { it.name == "5" }.text)
+        assertEquals(Block.Art.FREI, b.first { it.name == "2" }.art)
+        v.stunden.clear(); u.removeAt(1)
+        assertEquals("1", Stundenplan.tag(tag, Schulzeit.standard, u, v, ganz = true).first().name)
+    }
+
+    /** Eingebaute Schul-Vorgaben: mit scripts/vorgaben.mjs (iOS-Repo, Node) verschlüsselt, hier entschlüsselt */
+    @Test fun schulVorgaben() {
+        val d = "{\"v\":1,\"runden\":300000,\"salz\":\"W6QEfqoNzwvhrr8d1DnPlQ==\",\"daten\":\"Nk6uPoabjllI6YhWmXpG4hTDFOTrk622Nzc8pUjEF7+uZWa1r4ZiRKjGiD5YU0HTUvdpg9mUuJvunAP3sTQZtqgrEMmU3BKxeHFvuw9WzaAaj/sk01p6nL2hEzEvHHVdjfU=\"}"
+        val v = SchulVorgaben.entschluesseln(d, "test")
+        assertEquals("https://x/s/abc", v.vertretungLink); assertEquals("pw", v.freigabe); assertEquals("HH", v.bundesland)
+        assertThrows(SchulVorgaben.FalscherCode::class.java) { SchulVorgaben.entschluesseln(d, "falsch") }
+    }
 }

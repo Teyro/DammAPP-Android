@@ -51,7 +51,7 @@ object VertretungsMeldung {
     }
 
     fun eintraege(v: VertretungsPlan): List<String> =
-        v.stunden.map { (if (it.stunde.isEmpty()) "" else "${it.stunde}. ") + "Vertretung ${it.klasse}" } +
+        v.stunden.map { (if (it.stunde.trim('.', ' ').toIntOrNull() == null) "" else "${it.stunde}. ") + VertretungsPlan.titel(it) } +
             v.pausen.map { "${if (it.reserve) "Reserve" else "Aufsicht"} ${it.pause} · ${it.ort}" } +
             (if (v.fehlt) listOf("Du bist als fehlend eingetragen") else emptyList()) +
             (if (v.ausserHaus) listOf("Du bist außer Haus eingetragen") else emptyList())

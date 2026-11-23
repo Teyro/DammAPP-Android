@@ -14,4 +14,8 @@ done
 adb shell cmd uimode night no
 adb shell input swipe 540 1800 540 600 400; foto start_gescrollt 2
 for b in vertretung stundenplan mensa abwesend stoerungen aufgaben einstellungen; do start "dammapp://$b"; foto "$b" 6; done
+# Einrichtungs-Assistent: Willkommen, dann Schritt „Schule“
+adb shell am start -S -W -n $P/.MainActivity --ez vorschau true --ez assistent true >/dev/null; foto assistent_1 6
+adb shell input tap 540 2250; foto assistent_2 3
+adb shell input tap 540 2250; foto assistent_3 3
 adb logcat -d > logcat.txt

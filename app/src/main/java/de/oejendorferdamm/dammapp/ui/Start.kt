@@ -85,7 +85,7 @@ private fun SchulKarte(oeffne: (Bereich) -> Unit) {
             }
         } else if (v != null) {
             if (v.stunden.isEmpty() && v.pausen.isEmpty() && !v.fehlt) Text("✅ Keine Vertretung für dich", color = Farben.gut, fontWeight = FontWeight.Medium)
-            v.stunden.forEach { s -> Zeile(if (s.stunde.toIntOrNull() != null) "${s.stunde}." else s.stunde.take(4), Farben.vertretung, "Vertretung ${s.klasse}", Vertretung.haus(s.klasse, e.haeuser).ifEmpty { null }) }
+            v.stunden.forEach { s -> Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.vertretung, VertretungsPlan.titel(s), Vertretung.haus(s.klasse, e.haeuser).ifEmpty { null }) }
             v.pausen.forEach { p -> Zeile(p.pause.take(1) + ".P", Farben.aufsicht, if (p.reserve) "Aufsicht (Reserve)" else "Hofaufsicht", "${p.pause} · ${p.ort}") }
         } else Text("Noch kein Stundenplan und kein Vertretungsplan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         FehlerText(Kern.vertretungFehler)

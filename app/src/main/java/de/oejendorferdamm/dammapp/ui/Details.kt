@@ -41,7 +41,7 @@ fun VertretungSeite(zurueck: () -> Unit) {
                 if (p.stunden.isEmpty() && p.pausen.isEmpty() && !p.fehlt) Text("✅ Keine Vertretung, keine Aufsicht", color = Farben.gut, fontWeight = FontWeight.Medium)
                 p.stunden.forEach { s ->
                     val h = Vertretung.haus(s.klasse, e.haeuser)
-                    Zeile(if (s.stunde.toIntOrNull() != null) "${s.stunde}." else s.stunde.take(4), Farben.vertretung, "Vertretung ${s.klasse}",
+                    Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.vertretung, VertretungsPlan.titel(s),
                         listOf(if (s.stunde.toIntOrNull() != null) "${s.stunde}. Stunde" else s.stunde, h).filter { it.isNotEmpty() }.joinToString(" · "))
                 }
                 p.pausen.forEach { a -> Zeile(a.pause.take(1) + ".P", Farben.aufsicht, if (a.reserve) "Aufsicht (Reserve)" else "Hofaufsicht", "${a.pause} · ${a.ort}") }

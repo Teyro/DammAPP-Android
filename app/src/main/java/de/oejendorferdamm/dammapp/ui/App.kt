@@ -35,6 +35,7 @@ fun App(ziel: MutableState<Bereich?>) {
         fun zurueck() { if (stapel.size > 1) stapel.removeAt(stapel.lastIndex) }
         BackHandler(stapel.size > 1) { zurueck() }
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            if (Kern.assistentOffen) { AssistentSeite(); return@Surface }
             AnimatedContent(stapel.last(), label = "Bereich", transitionSpec = {
                 if (targetState.ordinal >= initialState.ordinal || initialState == Bereich.START)
                     (slideInHorizontally { it / 4 } + fadeIn()) togetherWith fadeOut()

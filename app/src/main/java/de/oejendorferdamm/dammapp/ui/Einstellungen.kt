@@ -63,6 +63,11 @@ fun EinstellungenSeite(zurueck: () -> Unit) {
                     }
                 }
             }
+            item {
+                FilledTonalButton({ Kern.assistentOffen = true }, Modifier.fillMaxWidth()) {
+                    Icon(Icons.Rounded.AutoFixHigh, null); Spacer(Modifier.width(8.dp)); Text("Einrichtungs-Assistent starten")
+                }
+            }
         }
     } else Seite(s.titel, { seite = null }, aktualisieren = null) {
         when (s) {

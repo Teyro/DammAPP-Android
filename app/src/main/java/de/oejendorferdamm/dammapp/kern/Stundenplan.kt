@@ -41,6 +41,9 @@ data class Block(val name: String, val von: LocalDateTime, val bis: LocalDateTim
 object Stundenplan {
     private fun zeit(tag: LocalDate, minuten: Int) = tag.atTime(minuten / 60, minuten % 60)
 
+    /** Zeile im Vertretungsplan → Name im Raster: „3.“ → „3“, „Frühbetreuung Mensa“ → „0“ */
+    fun stunde(s: String): String { val t = s.trim('.', ' '); return if (t.toIntOrNull() != null) t else if (t.lowercase().startsWith("früh")) "0" else t }
+
     /** „1. Pause“ ↔ „Pause 1“, „1.P“ – die Nummer zählt */
     fun pausenNummer(s: String): Int? = if (!s.lowercase().contains("p")) null else s.firstOrNull { it.isDigit() }?.digitToInt()
 
@@ -50,7 +53,8 @@ object Stundenplan {
         val wt = datum.dayOfWeek.value
         val v = vertretung?.takeIf { it.datum == null || it.datum == datum.toString() }
         val bloecke = ArrayList<Block>()
-        for (z in zeiten.sortedBy { it.von }) {
+        // 0. Stunde (8:00–8:30, Frühförderung/Frühbetreuung) gehört immer zum Raster
+        for (z in UntisRaster.raster(zeiten).sortedBy { it.von }) {
             val von = zeit(datum, z.von); val bis = zeit(datum, z.bis)
             if (z.pause) {
                 val ps = v?.pausen?.filter { pausenNummer(it.pause) == pausenNummer(z.name) } ?: emptyList()
@@ -60,12 +64,12 @@ object Stundenplan {
                 } else bloecke.add(Block(z.name, von, bis, Block.Art.PAUSE, "Pause"))
                 continue
             }
-            val s = v?.stunden?.firstOrNull { it.stunde.trim('.', ' ') == z.name }
+            val s = v?.stunden?.firstOrNull { stunde(it.stunde) == z.name }
             val u = unterricht.firstOrNull { it.tag == wt && it.stunde == z.name }
             when {
                 s != null -> {
                     val h = Vertretung.haus(s.klasse, haeuser)
-                    bloecke.add(Block(z.name, von, bis, Block.Art.VERTRETUNG, "Vertretung ${s.klasse}" + if (h.isEmpty()) "" else " · $h", ersetzt = u?.text))
+                    bloecke.add(Block(z.name, von, bis, Block.Art.VERTRETUNG, VertretungsPlan.titel(s) + if (h.isEmpty()) "" else " · $h", ersetzt = u?.text))
                 }
                 u != null -> bloecke.add(
                     if (ausfall.any { it.first < z.bis && it.last > z.von }) Block(z.name, von, bis, Block.Art.FREI, "Entfall", ersetzt = u.text)
@@ -73,6 +77,18 @@ object Stundenplan {
                 else -> bloecke.add(Block(z.name, von, bis, Block.Art.FREI, "frei"))
             }
         }
+        // Begleitungen aus der „Wichtig“-Zeile („Begleitung Nelson … 3.-5. Sta“): eigene Stunde durchgestrichen, darunter „2c → Nelson“
+        for (bem in v?.bemerkungen.orEmpty().filter { it.was.startsWith("Begleitung ") }) {
+            val wer = bem.was.removePrefix("Begleitung ")
+            for (n in bem.stunden) {
+                val i = bloecke.indexOfFirst { it.name == n.toString() }
+                if (i < 0 || (bloecke[i].art != Block.Art.UNTERRICHT && bloecke[i].art != Block.Art.FREI)) continue
+                val alt = if (bloecke[i].art == Block.Art.UNTERRICHT) bloecke[i].text else bloecke[i].ersetzt
+                bloecke[i] = bloecke[i].copy(art = Block.Art.VERTRETUNG, text = if (bem.klasse.isEmpty()) bem.was else "${bem.klasse} → $wer", ersetzt = alt)
+            }
+        }
+        // 0. Stunde nur, wenn dort etwas ist
+        if (bloecke.firstOrNull()?.let { it.name == "0" && !it.zeigen } == true) bloecke.removeAt(0)
         val mitAufteilung = bloecke.map { b -> v?.aufteilung?.get(b.name)?.takeIf { it.isNotEmpty() }?.let { b.copy(aufteilung = it) } ?: b }
         val erst = mitAufteilung.indexOfFirst { it.zeigen }
         val letzt = mitAufteilung.indexOfLast { it.zeigen }

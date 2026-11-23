@@ -141,7 +141,7 @@ object Untis {
         val liste = ArrayList<Unterricht>()
         for (s in grundwoche(st.meine)) {
             val wt = Zeit.tag(s.datum)?.dayOfWeek?.value ?: continue
-            for (z in zeiten) {
+            for (z in UntisRaster.raster(zeiten)) {
                 if (z.pause || z.von >= s.bis || z.bis <= s.von) continue
                 if (liste.any { it.tag == wt && it.stunde == z.name }) continue
                 liste.add(Unterricht(wt, z.name, s.klassen.joinToString(", "), s.fachLang.ifEmpty { s.fach }, s.raum))

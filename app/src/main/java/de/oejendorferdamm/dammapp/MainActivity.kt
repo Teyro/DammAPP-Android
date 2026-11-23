@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         Kern.init(this)
         if (BuildConfig.DEBUG && intent.getBooleanExtra("vorschau", false)) Kern.vorschauDaten()
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("assistent", false)) Kern.assistentOffen = true
         ziel.value = Bereich.aus(intent)
         setContent { App(ziel) }
         val fehlt = buildList {

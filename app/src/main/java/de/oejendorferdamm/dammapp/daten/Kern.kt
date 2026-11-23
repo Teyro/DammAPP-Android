@@ -56,6 +56,9 @@ object Kern {
     var hostFrage by mutableStateOf<String?>(null)
     /** IServ: Zwei-Faktor-Code von Hand (Hinweistext, solange gewartet wird) */
     var codeHinweis by mutableStateOf<String?>(null)
+    /** Einrichtungs-Assistent – einmal für alle (neu oder schon eingerichtet), in den Einstellungen neu startbar */
+    var assistentOffen by mutableStateOf(false)
+    fun assistentFertig() { assistentOffen = false; app.getSharedPreferences("assistent", Context.MODE_PRIVATE).edit().putBoolean("fertig1", true).apply() }
     private val codeAntwort = SynchronousQueue<String>()
 
     fun init(c: Context) {
@@ -70,6 +73,7 @@ object Kern {
         schulTermine = ablage.lies("schultermine") ?: emptyList()
         abwesend = ablage.lies("abwesend"); stoerungen = ablage.lies("stoerungen"); aufgaben = ablage.lies("aufgaben")
         Melder.kanaele(app)
+        assistentOffen = !app.getSharedPreferences("assistent", Context.MODE_PRIVATE).getBoolean("fertig1", false)
     }
 
     fun aendere(f: (Einstellungen) -> Einstellungen) { einstellungen = f(einstellungen); if (!vorschau) ablage.speichern(einstellungen) }
@@ -198,6 +202,7 @@ object Kern {
 
     fun vorschauDaten() {
         vorschau = true
+        assistentOffen = false
         val heute = Zeit.heute().let { if (Zeit.wochenende(it)) it.plusDays((8 - it.dayOfWeek.value).toLong()) else it }
         val t = heute.atTime(7, 0)
         einstellungen = Einstellungen(kuerzel = "Sta", vertretungLink = "https://cloud.example.de/s/Beispiel", haeuser = mapOf("Haus 2" to listOf("2a", "2b", "2c")),
@@ -207,7 +212,7 @@ object Kern {
         wetter = Wetter(4.0, 3, WetterTag(61, 8.0, 2.0, 70, 20.0), WetterTag(2, 10.0, 3.0, 10, 15.0), t,
             (0 until 36).map { i -> val z = t.plusMinutes(15L * i); val m = z.hour * 60 + z.minute; val nass = m in 601..630
                 WetterSchritt(z, if (nass) 63 else 2, 4 + i / 9.0, if (nass) 0.6 else 0.0, if (nass) 80 else 10, 20.0) })
-        vertretung = VertretungsPlan(datum = heute.toString()).apply { stunden.add(VertretungsPlan.Stunde("2", "2c")); pausen.add(VertretungsPlan.Pause("2. Pause", "Mensa + Haltestelle"))
+        vertretung = VertretungsPlan(datum = heute.toString()).apply { stunden.add(VertretungsPlan.Stunde("2", "2c")); stunden.add(VertretungsPlan.Stunde("Frühbetreuung Mensa", "")); bemerkungen = listOf(Bemerkung(listOf(4), "Begleitung Nelson", "2c")); pausen.add(VertretungsPlan.Pause("2. Pause", "Mensa + Haltestelle"))
             alleHinweise.add("Dienstbesprechung um 14 Uhr im Lehrerzimmer") }
         mensaPlan = MensaPlan(listOf(MensaTag(heute.toString(), mutableListOf(Gericht("Menü 1", "Spaghetti Bolognese", true), Gericht("Menü 2", "Gemüsecurry mit Reis (vegan)")))), 23.40)
         obstTage = setOf(heute.toString())

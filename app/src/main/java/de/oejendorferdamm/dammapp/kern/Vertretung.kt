@@ -34,6 +34,10 @@ data class VertretungsPlan(
 ) {
     @kotlinx.serialization.Serializable
     data class Stunde(val stunde: String, val klasse: String)
+    companion object {
+        /** „Vertretung 2c“ – bei Zeilen ohne Stundennummer („Frühbetreuung Mensa“) deren Titel */
+        fun titel(s: Stunde) = if (s.stunde.trim('.', ' ').toIntOrNull() != null) "Vertretung ${s.klasse}" else listOf(s.stunde, s.klasse).filter { it.isNotEmpty() }.joinToString(" ")
+    }
     /** „(Sta)“ im Plan = nur Reserve */
     @kotlinx.serialization.Serializable
     data class Pause(val pause: String, val ort: String, val reserve: Boolean = false)
