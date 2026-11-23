@@ -108,4 +108,15 @@ class KernTest {
         assertEquals("https://x/s/abc", v.vertretungLink); assertEquals("pw", v.freigabe); assertEquals("HH", v.bundesland)
         assertThrows(SchulVorgaben.FalscherCode::class.java) { SchulVorgaben.entschluesseln(d, "falsch") }
     }
+
+    /** Abwesend: morgens IServ ohne Ausgegraute, ab Vertretungsplan „krank + außer Haus“ (echte Zeilen 23.11.) */
+    @Test fun abwesendZahl() {
+        val tag = LocalDate.of(2026, 11, 23)
+        val l = listOf("Anna Beispiel", "Ben Muster", "Cem Probe").map { Abwesenheit(it, "", "2026-11-23", "2026-11-23", "krank") }
+        assertEquals("3" to "fehlen", Abwesenheiten.zahl(l, emptyList(), null, tag))
+        assertEquals("2", Abwesenheiten.zahl(l, listOf(" ben muster "), null, tag).first)
+        val p = VertretungsPlan(datum = "2026-11-23").apply { fehlen = listOf("Kru", "Kut", "Reh", "Kha", "Beu"); ausserListe = listOf("Ayd", "Wa+Hoff (8:30-12:15)") }
+        assertEquals("5 + 3" to "krank + außer Haus", Abwesenheiten.zahl(l, emptyList(), p, tag))
+        assertEquals("3", Abwesenheiten.zahl(l, emptyList(), p, tag.plusDays(1)).first)
+    }
 }

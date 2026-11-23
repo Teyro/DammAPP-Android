@@ -59,6 +59,8 @@ data class Einstellungen(
     val iservHosts: List<String> = emptyList(),
     val abwesenheiten: Boolean = false,
     val abwesendKlassen: String = "",
+    /** Ausgegraut: stehen in der Liste, zählen aber nicht mit */
+    val abwesendAus: List<String> = emptyList(),
     val sichtschutz: Boolean = true,
     val abwesendQuelle: IServQuelle? = null,
     val stoerungen: Boolean = false,

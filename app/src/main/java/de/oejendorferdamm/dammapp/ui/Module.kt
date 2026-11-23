@@ -3,6 +3,7 @@ package de.oejendorferdamm.dammapp.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -35,20 +36,38 @@ fun AbwesendSeite(zurueck: () -> Unit) {
     val ziel = Kern.schulTag
     Seite("Abwesenheiten", zurueck, untertitel = Kern.schulTagName.replaceFirstChar { it.uppercase() } + if (e.klassenListe.isEmpty()) "" else " · " + e.klassenListe.joinToString(", "),
         aktualisieren = { Kern.moduleLaden(true) }) {
+        val (zahl, wort) = Kern.abwesendZahl
+        val zaehlt = liste.filter { !Abwesenheiten.ausgegraut(it, e.abwesendAus) }
+        val grau = liste.filter { Abwesenheiten.ausgegraut(it, e.abwesendAus) }
+        val planDa = wort.startsWith("krank")
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${liste.size}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(12.dp)); Text(if (liste.size == 1) "Kind fehlt" else "Kinder fehlen", style = MaterialTheme.typography.titleMedium)
+                Text(zahl, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(if (planDa) "$wort (Vertretungsplan)" else wort, style = MaterialTheme.typography.titleMedium)
+                    if (planDa) Text("IServ: ${zaehlt.size}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
+            Text("Antippen graut aus: steht weiter in der Liste, zählt aber nicht mit. Noch einmal antippen holt zurück.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (Kern.abwesendFehler.isNotEmpty()) item { FehlerText(Kern.abwesendFehler) }
-        val ganz = liste.filter { !it.stundenweise }; val std = liste.filter { it.stundenweise }
-        listOf("Ganztägig" to ganz, "Einzelne Stunden" to std).forEach { (titel, l) ->
+        fun umschalten(a: Abwesenheit) = Kern.aendere { x ->
+            if (Abwesenheiten.ausgegraut(a, x.abwesendAus)) x.copy(abwesendAus = x.abwesendAus.filterNot { it.trim().equals(a.name.trim(), ignoreCase = true) })
+            else x.copy(abwesendAus = x.abwesendAus + a.name)
+        }
+        val ganz = zaehlt.filter { !it.stundenweise }; val std = zaehlt.filter { it.stundenweise }
+        listOf(Triple("Ganztägig", ganz, false), Triple("Einzelne Stunden", std, false), Triple("Ausgegraut – zählt nicht", grau, true)).forEach { (titel, l, aus) ->
             if (l.isNotEmpty()) item {
-                Karte(Icons.Rounded.PersonOff, Farben.fehlt, titel) {
+                Karte(Icons.Rounded.PersonOff, if (aus) MaterialTheme.colorScheme.outline else Farben.fehlt, titel) {
                     l.forEach { a ->
                         val art = Abwesenheiten.arten[a.art] ?: ("📌" to "abwesend")
-                        Zeile(art.first, Farben.fehlt, a.name, listOf(a.klasse, art.second, Abwesenheiten.zeitText(a, ziel)).filter { it.isNotEmpty() }.joinToString(" · "))
+                        Box(Modifier.alpha(if (aus) 0.45f else 1f)) {
+                            Zeile(art.first, if (aus) MaterialTheme.colorScheme.outline else Farben.fehlt, a.name,
+                                listOf(a.klasse, art.second, Abwesenheiten.zeitText(a, ziel)).filter { it.isNotEmpty() }.joinToString(" · "), onClick = { umschalten(a) }) {
+                                Icon(if (aus) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (aus) "Wieder mitzählen" else "Ausgrauen", tint = MaterialTheme.colorScheme.outline)
+                            }
+                        }
                     }
                 }
             }

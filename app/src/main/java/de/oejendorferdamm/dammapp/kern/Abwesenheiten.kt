@@ -128,6 +128,25 @@ object Abwesenheiten {
         return "${t(m.groupValues[1], m.groupValues[2])}–${t(m.groupValues[3], m.groupValues[4])} Uhr"
     }
 
+    /** Ausgegraut? (Name steht in [aus], ohne Groß/Klein und Leerzeichen am Rand) */
+    fun ausgegraut(a: Abwesenheit, aus: List<String>) = aus.any { it.trim().equals(a.name.trim(), ignoreCase = true) }
+
+    /** Personen in einer Plan-Zeile: „Wa+Hoff (8:30-12:15)“ = 2 */
+    fun personen(liste: List<String>) = liste.sumOf { t -> t.substringBefore('(').split('+', '&').count { it.isNotBlank() }.coerceAtLeast(1) }
+
+    /**
+     * Zahl oben in der Kachel: morgens die Meldungen aus IServ (ohne Ausgegraute); ist der Vertretungsplan für den Tag da,
+     * dessen „Es fehlen“ plus „Außer Haus“ – „7 + 2“ / „krank + außer Haus“.
+     */
+    fun zahl(liste: List<Abwesenheit>, aus: List<String>, plan: VertretungsPlan?, ziel: LocalDate): Pair<String, String> {
+        if (plan != null && plan.datum == ziel.toString() && (plan.fehlen.isNotEmpty() || plan.ausserListe.isNotEmpty())) {
+            val k = personen(plan.fehlen); val a = personen(plan.ausserListe)
+            return if (a > 0) "$k + $a" to "krank + außer Haus" else "$k" to "krank"
+        }
+        val n = liste.count { !ausgegraut(it, aus) }
+        return "$n" to if (n == 1) "fehlt" else "fehlen"
+    }
+
     /** Wer fehlt am Zieltag: nach Klassen gefiltert, jede Person einmal, ganztägig zuerst */
     fun amTag(l: List<Abwesenheit>, ziel: LocalDate, klassen: List<String> = emptyList()): List<Abwesenheit> {
         val z = ziel.toString()

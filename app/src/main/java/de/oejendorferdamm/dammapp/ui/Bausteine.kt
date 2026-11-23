@@ -139,7 +139,7 @@ fun ZahlKachel(symbol: ImageVector, farbe: Color, zahl: String, text: String, mo
     ElevatedCard(modifier.clip(CardDefaults.elevatedShape).clickable(onClick = onClick), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.padding(14.dp).fillMaxWidth()) {
             Icon(symbol, null, tint = farbe)
-            Text(zahl, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(zahl, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
             Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }

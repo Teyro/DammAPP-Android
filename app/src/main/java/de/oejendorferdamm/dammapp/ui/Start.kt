@@ -122,8 +122,11 @@ private fun ZahlenReihe(oeffne: (Bereich) -> Unit) {
     val e = Kern.einstellungen
     if (!e.abwesenheiten && !e.stoerungen && !e.aufgaben) return
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
-        if (e.abwesenheiten) ZahlKachel(Icons.Rounded.PersonOff, Farben.fehlt, if (Kern.abwesend == null) (if (Kern.abwesendFehler.isEmpty()) "…" else "!") else "${Kern.abwesendAmTag.size}",
-            "Kinder fehlen", Modifier.weight(1f).fillMaxHeight()) { oeffne(Bereich.ABWESEND) }
+        // morgens IServ (ohne Ausgegraute), ab Vertretungsplan „krank + außer Haus“ laut Plan
+        if (e.abwesenheiten) Kern.abwesendZahl.let { (zahl, wort) ->
+            ZahlKachel(Icons.Rounded.PersonOff, Farben.fehlt, if (Kern.abwesend == null && !wort.startsWith("krank")) (if (Kern.abwesendFehler.isEmpty()) "…" else "!") else zahl,
+                wort, Modifier.weight(1f).fillMaxHeight()) { oeffne(Bereich.ABWESEND) }
+        }
         if (e.stoerungen) ZahlKachel(Icons.Rounded.Build, Farben.aufsicht, Kern.stoerungen?.offen?.size?.toString() ?: if (Kern.stoerungenFehler.isEmpty()) "…" else "!",
             "Störungen", Modifier.weight(1f).fillMaxHeight()) { oeffne(Bereich.STOERUNGEN) }
         if (e.aufgaben) ZahlKachel(Icons.Rounded.Checklist, Farben.gut, Kern.aufgaben?.offen?.size?.toString() ?: if (Kern.aufgabenFehler.isEmpty()) "…" else "!",

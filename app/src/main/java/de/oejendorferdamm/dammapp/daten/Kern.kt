@@ -98,6 +98,8 @@ object Kern {
     val ha get() = HomeAssistant(einstellungen.haAdresse, geheim.ha)
     val inDerSchule get() = !Zeit.wochenende(Zeit.heute()) && freiHeute == null && Zeit.jetzt().hour in 6..14
     val abwesendAmTag get() = Abwesenheiten.amTag(abwesend?.eintraege ?: emptyList(), schulTag, einstellungen.klassenListe)
+    /** Zahl und Wort für die Kachel: IServ ohne Ausgegraute, ab Vertretungsplan „krank + außer Haus“ */
+    val abwesendZahl get() = Abwesenheiten.zahl(abwesendAmTag, einstellungen.abwesendAus, vertretung, schulTag)
 
     // MARK: Laden
 
@@ -218,6 +220,7 @@ object Kern {
         obstTage = setOf(heute.toString())
         schulTermine = listOf(SchulKalender.Termin(heute.plusDays(3).toString(), "Elternsprechtag"), SchulKalender.Termin(heute.plusDays(7).toString(), "Laternenumzug"))
         abwesend = AbwesenheitenStand(listOf(Abwesenheit("Mia Klein", "2b", heute.toString(), heute.toString(), "krank"), Abwesenheit("Ben Groß", "2b", heute.minusDays(1).toString(), heute.plusDays(1).toString(), "entschuldigt")))
+        einstellungen = einstellungen.copy(abwesendAus = listOf("Ben Groß")); vertretung?.apply { fehlen = listOf("Kru", "Kut", "Reh", "Kha", "Beu"); ausserListe = listOf("Ayd", "Wa+Hoff (8:30-12:15)") }
         stoerungen = StoerungenStand(listOf(
             Stoerung("Beamer flackert", "Der Beamer in der 2b flackert nach 10 Minuten.", "Kim Muster", "", Zeit.jetzt().minusHours(3), "Neu", "Raum 2b", false, true, ""),
             Stoerung("WLAN im Haus 2 langsam", "", "Alex Beispiel", "IT-Team", Zeit.jetzt().minusDays(1), "In Bearbeitung", "Haus 2", false, false, ""),
