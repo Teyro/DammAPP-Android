@@ -130,13 +130,37 @@ fun MensaSeite(zurueck: () -> Unit) {
     val e = Kern.einstellungen
     val uri = LocalUriHandler.current
     val p = Kern.mensaPlan
+    // Wochen zum Blättern; Start = Woche des Essenstags (am Wochenende also die nächste)
+    val wochen = p?.tage.orEmpty().groupBy { (Zeit.tag(it.datum) ?: LocalDate.MIN).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) }.toSortedMap().entries.toList()
+    val start = wochen.indexOfFirst { w -> w.value.any { it.datum >= Kern.essenTag.toString() } }.let { if (it < 0) wochen.size - 1 else it }
+    var woche by remember(wochen.size, start) { mutableIntStateOf(start) }
     Seite("Speiseplan", zurueck, untertitel = p?.guthaben?.let { "Guthaben " + "%.2f €".format(it).replace('.', ',') }, aktionen = {
         if (e.mensaAdresse.isNotEmpty()) IconButton({ runCatching { uri.openUri(e.mensaAdresse) } }) { Icon(Icons.Rounded.ShoppingCart, "Im Portal bestellen") }
     }) {
         if (p == null) { item { FehlerText(Kern.mensaFehler.ifEmpty { "Noch kein Speiseplan geladen." }) }; return@Seite }
         val gut = e.lieblingsGerichte.map(Gericht::schluessel).toSet(); val schlecht = e.nichtLecker.map(Gericht::schluessel).toSet()
         item { Text("⭐ oder 👎 antippen zum Merken, noch einmal antippen zum Abwählen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(p.tage.filter { it.datum >= Kern.essenTag.toString() }) { t ->
+        if (wochen.isEmpty()) return@Seite
+        val i = woche.coerceIn(0, wochen.size - 1)
+        val diese = Zeit.heute().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val montag = wochen[i].key
+        fun istGut(g: Gericht) = g.schluessel in gut || (e.favoriten.isNotEmpty() && g.passt(e.favoriten))
+        val treffer = wochen[i].value.mapNotNull { t -> if (t.frei != null) null else t.gerichte.firstOrNull(::istGut)?.let { t to it } }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton({ woche = i - 1 }, enabled = i > 0) { Icon(Icons.Rounded.ChevronLeft, "Woche zurück") }
+                Text(when (montag) { diese -> "Diese Woche"; diese.plusWeeks(1) -> "Nächste Woche"; else -> "KW " + montag.get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR) },
+                    Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                FilledTonalIconButton({ woche = i + 1 }, enabled = i < wochen.size - 1) { Icon(Icons.Rounded.ChevronRight, "Woche vor") }
+            }
+        }
+        if (gut.isNotEmpty() || e.favoriten.isNotEmpty()) item {
+            Karte(Icons.Rounded.Star, Color(0xFFF9AB00), if (treffer.isEmpty()) "Diesmal nichts aus deinen Favoriten" else "⭐ ${treffer.size}× aus deinen Favoriten") {
+                if (treffer.isNotEmpty()) Text(treffer.joinToString(" · ") { (t, g) -> (Zeit.tag(t.datum)?.dayOfWeek?.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.GERMAN) ?: "") + " " + g.text },
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        items(wochen[i].value) { t ->
             val d = Zeit.tag(t.datum)
             Karte(Icons.Rounded.Restaurant, if (t.datum == Kern.essenTag.toString()) Color(0xFF0B8043) else MaterialTheme.colorScheme.outline,
                 d?.let { SchulKalender.datumText(t.datum).replaceFirstChar { c -> c.uppercase() } + if (SchulKalender.datumText(t.datum).length < 8) " · " + Zeit.datumLang(it) else "" } ?: t.datum) {

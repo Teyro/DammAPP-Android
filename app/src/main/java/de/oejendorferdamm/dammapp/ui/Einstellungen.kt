@@ -35,13 +35,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class Unterseite(val titel: String, val symbol: ImageVector, val farbe: Color) {
+    // Reihenfolge wie in der iOS-App
     AUSSEHEN("Aussehen und Startseite", Icons.Rounded.Palette, Color(0xFFD81B60)),
+    NACHT("Wetter und Nacht", Icons.Rounded.Bedtime, Color(0xFFE8710A)),
     SCHULE("Schule", Icons.Rounded.School, Color(0xFF1A73E8)),
-    ESSEN("Mensa, Obst und Termine", Icons.Rounded.Restaurant, Color(0xFF0B8043)),
     ISERV("IServ und Edupool", Icons.Rounded.Groups, Color(0xFF00897B)),
     MITTEILUNGEN("Mitteilungen", Icons.Rounded.NotificationsActive, Color(0xFFD93025)),
-    ZUHAUSE("Home Assistant", Icons.Rounded.Home, Color(0xFFE8710A)),
-    ORT("Ort und Kalender", Icons.Rounded.Place, Color(0xFF5F6368)),
+    ZUHAUSE("Zuhause (Home Assistant)", Icons.Rounded.Home, Color(0xFF0B8043)),
+    WEITERES("Kalender und Region", Icons.Rounded.CalendarMonth, Color(0xFF5F6368)),
     UEBER("Über DammAPP", Icons.Rounded.Info, Color(0xFF3949AB)),
 }
 
@@ -66,12 +67,12 @@ fun EinstellungenSeite(zurueck: () -> Unit) {
     } else Seite(s.titel, { seite = null }, aktualisieren = null) {
         when (s) {
             Unterseite.AUSSEHEN -> aussehen()
-            Unterseite.SCHULE -> schule()
-            Unterseite.ESSEN -> essen()
+            Unterseite.NACHT -> { wetter(); guteNacht() }
+            Unterseite.SCHULE -> { schule(); essen() }
             Unterseite.ISERV -> iserv()
             Unterseite.MITTEILUNGEN -> mitteilungen()
             Unterseite.ZUHAUSE -> zuhause()
-            Unterseite.ORT -> ort()
+            Unterseite.WEITERES -> weiteres()
             Unterseite.UEBER -> ueber()
         }
     }
@@ -82,12 +83,12 @@ private fun zusammenfassung(u: Unterseite): String {
     fun an(b: Boolean) = if (b) "an" else "aus"
     return when (u) {
         Unterseite.AUSSEHEN -> "Material You ${an(e.dynamischeFarben)} · ${Startseite.ordnung(e.kachelReihenfolge, e.kachelAus, true).size} Kacheln"
-        Unterseite.SCHULE -> listOf(e.kuerzel.ifEmpty { "kein Kürzel" }, "WebUntis ${an(e.untisAn)}", "${e.unterricht.size} Stunden").joinToString(" · ")
-        Unterseite.ESSEN -> "Mensa ${an(e.mensa)} · Obst ${an(e.obst)} · Schultermine ${an(e.schulKalender.isNotEmpty())}"
+        Unterseite.NACHT -> e.ortName.ifEmpty { "kein Ort" } + " · Gute Nacht: ${e.nacht.size} Aktionen"
+        Unterseite.SCHULE -> listOf(e.kuerzel.ifEmpty { "kein Kürzel" }, "WebUntis ${an(e.untisAn)}", "Mensa ${an(e.mensa)}", "Obst ${an(e.obst)}").joinToString(" · ")
         Unterseite.ISERV -> "Abwesenheiten ${an(e.abwesenheiten)} · Störungen ${an(e.stoerungen)} · Edupool ${an(e.aufgaben)}"
-        Unterseite.MITTEILUNGEN -> "Neuigkeiten ${an(e.mitteilungen)} · Vertretung ${an(e.vertretungDa || e.vertretungMelden)}"
-        Unterseite.ZUHAUSE -> if (Kern.ha.eingerichtet) "Gute Nacht: ${e.nacht.size} Aktionen" else "nicht eingerichtet"
-        Unterseite.ORT -> "${e.ortName} · ${e.bundesland} · Kalender ${an(e.termine)}"
+        Unterseite.MITTEILUNGEN -> "Störungen und Aufgaben ${an(e.mitteilungen)}"
+        Unterseite.ZUHAUSE -> if (Kern.ha.eingerichtet) "verbunden" else "nicht eingerichtet"
+        Unterseite.WEITERES -> "Kalender ${an(e.termine)} · ${e.bundesland}"
         Unterseite.UEBER -> "Version ${BuildConfig.VERSION_NAME}"
     }
 }
@@ -154,6 +155,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.schule() {
         Feld("Freigabe-Link des Ordners", x.vertretungLink, tastatur = KeyboardType.Uri) { v -> e { it.copy(vertretungLink = v.trim()) } }
         Feld("Passwort der Freigabe (falls nötig)", Kern.geheim.freigabe, geheim = true) { v -> g { it.copy(freigabe = v) } }
         Feld("Häuser", Vertretung.text(x.haeuser), mehrzeilig = true) { v -> e { it.copy(haeuser = Vertretung.haeuser(v)) } }
+        Schalter("Mitteilung, sobald der neue Plan da ist", x.vertretungDa) { an -> e { it.copy(vertretungDa = an) } }
+        Schalter("Mitteilung, wenn mich der Plan betrifft", x.vertretungMelden) { an -> e { it.copy(vertretungMelden = an) } }
+        if (x.vertretungDa || x.vertretungMelden) Schalter("Als dringend melden", x.vertretungDringend, "mit Ton, auch bei „Bitte nicht stören“-Ausnahmen") { an -> e { it.copy(vertretungDringend = an) } }
     }
     gruppe("Schultag", "Die dauerhafte Benachrichtigung zeigt, was gerade läuft und was danach kommt – wie die Live-Aktivität auf dem iPhone.") {
         Schalter("Schultag als Benachrichtigung", x.schulBenachrichtigung) { an -> e { it.copy(schulBenachrichtigung = an) } }
@@ -242,13 +246,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.iserv() {
 
 private fun androidx.compose.foundation.lazy.LazyListScope.mitteilungen() {
     val x = Kern.einstellungen
-    gruppe("Neuigkeiten", "Ohne Push-Server fragt die App selbst nach: etwa stündlich, fest um 6:45 und nach 13:30, an Schultagen bis 8 Uhr alle 15 Minuten. Android bestimmt den genauen Zeitpunkt.") {
+    gruppe("Neuigkeiten", "Ohne Push-Server fragt die App selbst nach: etwa stündlich, fest um 6:45 und nach 13:30, an Schultagen bis 8 Uhr alle 15 Minuten. Android bestimmt den genauen Zeitpunkt. Die Mitteilungen zum Vertretungsplan stehen unter „Schule“.") {
         Schalter("Störungen, Aufgaben und Kommentare melden", x.mitteilungen) { an -> e { it.copy(mitteilungen = an) } }
-    }
-    gruppe("Vertretungsplan", "„Dringend“ meldet sich mit Ton auch bei „Bitte nicht stören“-Ausnahmen für wichtige Mitteilungen.") {
-        Schalter("Neuer Plan ist da", x.vertretungDa) { an -> e { it.copy(vertretungDa = an) } }
-        Schalter("Plan betrifft mich", x.vertretungMelden) { an -> e { it.copy(vertretungMelden = an) } }
-        Schalter("Als dringend melden", x.vertretungDringend) { an -> e { it.copy(vertretungDringend = an) } }
     }
     gruppe("System") {
         val c = LocalContext.current
@@ -258,10 +257,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mitteilungen() {
 
 private fun androidx.compose.foundation.lazy.LazyListScope.zuhause() {
     val x = Kern.einstellungen
-    gruppe("Verbindung", "Token: in Home Assistant unten links auf deinen Namen → Sicherheit → Langlebige Zugriffstoken.") {
+    gruppe("Verbindung", "Token: in Home Assistant unten links auf deinen Namen → Sicherheit → Langlebige Zugriffstoken. Gebraucht für „Gute Nacht“ (unter „Wetter und Nacht“).") {
         Feld("Adresse (https://…)", x.haAdresse, tastatur = KeyboardType.Uri) { v -> e { it.copy(haAdresse = v.trim()) } }
         Feld("Token", Kern.geheim.ha, geheim = true) { v -> g { it.copy(ha = v.trim()) } }
     }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.guteNacht() {
+    val x = Kern.einstellungen
     gruppe("Gute Nacht", "Je Zeile eine Aktion: Name | Dienst | Ziel, z. B. „Alle Lichter aus | light.turn_off | all“. Danach bleibt die Nachtlampe gedimmt an, offene Fenster werden genannt.") {
         Feld("Aktionen", x.nacht.joinToString("\n") { "${it.name} | ${it.dienst} | ${it.ziel}" }, mehrzeilig = true) { v ->
             e { it.copy(nacht = v.lines().mapNotNull { z -> z.split("|").map(String::trim).takeIf { t -> t.size >= 2 && t[1].contains(".") }?.let { t -> HAAktion(t[0], t[1], t.getOrElse(2) { "" }) } }) }
@@ -271,7 +274,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.zuhause() {
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.ort() {
+private fun androidx.compose.foundation.lazy.LazyListScope.wetter() {
     val x = Kern.einstellungen
     gruppe("Wetter", "Für Wetter und Pausenwetter (Open-Meteo).") {
         Feld("Ort", x.ortName) { v -> e { it.copy(ortName = v) } }
@@ -279,7 +282,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.ort() {
             Box(Modifier.weight(1f)) { Feld("Breite", x.lat.toString(), tastatur = KeyboardType.Decimal) { v -> v.replace(',', '.').toDoubleOrNull()?.let { d -> e { it.copy(lat = d) } } } }
             Box(Modifier.weight(1f)) { Feld("Länge", x.lon.toString(), tastatur = KeyboardType.Decimal) { v -> v.replace(',', '.').toDoubleOrNull()?.let { d -> e { it.copy(lon = d) } } } }
         }
-        Feld("Bundesland (Ferien, Feiertage), z. B. HH", x.bundesland) { v -> e { it.copy(bundesland = v.trim().uppercase().take(2)) } }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.weiteres() {
+    val x = Kern.einstellungen
+    gruppe("Region", "Für Ferien und Feiertage – dann zählen freie Tage nicht als Schultag.") {
+        Feld("Bundesland, z. B. HH", x.bundesland) { v -> e { it.copy(bundesland = v.trim().uppercase().take(2)) } }
     }
     gruppe("Kalender", "Termine aus den Kalendern des Geräts (Google, Exchange …) auf der Startseite und im Briefing.") {
         Schalter("Termine zeigen", x.termine) { an -> e { it.copy(termine = an) } }
