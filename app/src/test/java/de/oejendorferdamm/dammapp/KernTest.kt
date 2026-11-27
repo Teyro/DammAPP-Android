@@ -44,10 +44,11 @@ class KernTest {
         val xml = "<w:p><w:t>Freitag, 20.11.2026</w:t></w:p><w:tbl>" +
             "<w:tr>" + zelle("Klasse", 1000) + zelle("2a", 1000) + zelle("2c", 1000) + "</w:tr>" +
             "<w:tr>" + zelle("2", 1000) + zelle("", 1000) + zelle("Sta", 1000) + "</w:tr>" +
+            "<w:tr>" + zelle("B", 1000) + zelle("+Sta", 2000) + "</w:tr>" +
             "<w:tr>" + zelle("Es fehlen", 1000) + zelle("Mül, Kra", 2000) + "</w:tr></w:tbl>"
         val p = Vertretung.auswerten(xml, "Sta")
         assertEquals("2026-11-20", p.datum)
-        assertEquals(listOf(VertretungsPlan.Stunde("2", "2c")), p.stunden)
+        assertEquals(listOf(VertretungsPlan.Stunde("2", "2c"), VertretungsPlan.Stunde("6", "2a–2c")), p.stunden) // „B“ = 6. Stunde
         assertEquals(listOf("Mül", "Kra"), p.fehlen)
     }
 
@@ -164,6 +165,26 @@ class KernTest {
             e("Kim Muster", "Kommentar hinzufügen"), e("Kim Muster", "Schaue ich mir morgen an."), e("Kim Muster", "Schaue ich mir  morgen an."),
             e("Kim Muster", "Danke"), e("Linda Beutel", "Danke"))
         assertEquals(listOf("Das Board bleibt schwarz.", "Schaue ich mir morgen an.", "Danke", "Danke"), Stoerungen.bereinigen(l).map { it.text })
+    }
+
+    @Test fun chatKopfDerDetailseite() {
+        val t = "Details zu Kalendereintrag\nVertretungsplan\nZurück zur Liste\n\nKalendereintrag Vertretungsplan\nKim Muster | 01.10.2026 07:51\n| Medienproblem |\neingereicht\nHallo :)\n\nIch sehe den Kalender nicht.\n\nEs wurden noch keine Dateien angehängt!"
+        assertEquals(listOf("Hallo :)\n\nIch sehe den Kalender nicht."), Stoerungen.bereinigen(listOf(StoerungVerlauf.Eintrag("Kim Muster", "", t))).map { it.text })
+    }
+
+    @Test fun personenFarben() {
+        val f = mapOf("Christian S." to "#76a5af", "Christian N." to "#7aab5c", "Vivi" to "#8c7fc2")
+        assertEquals("#76a5af", Aufgaben.farbeFuer("Christian Stake Admin", f))
+        assertEquals("#7aab5c", Aufgaben.farbeFuer("Christian Normann", f))
+        assertEquals("#8c7fc2", Aufgaben.farbeFuer("Viviane Haist Admin", f))
+        assertEquals(null, Aufgaben.farbeFuer("Christian Xaver", f))
+    }
+
+    @Test fun avatare() {
+        val html = """<header><img class="avatar" src="/iserv/core/avatar/user/kim.muster" alt="Kim Muster"></header><div class="comment"><span class="author">Lea Beutel</span><p>Geht wieder.</p></div><img src="/logo.png" alt="Schule am Damm">"""
+        val v = Stoerungen.verlaufAus(html, "https://schule.de/iserv/report/7")
+        assertEquals("https://schule.de/iserv/core/avatar/user/kim.muster", v.avatar("Kim Muster Admin"))
+        assertEquals(null, v.avatar("Schule am Damm"))
     }
 
     /** Eigene Statistik: späterer Stand ersetzt, leere Vorlage zählt nicht, Reserve-Aufsicht nicht */

@@ -24,13 +24,20 @@ data class StoerungenStand(val meldungen: List<Stoerung>, val stand: LocalDateTi
 }
 
 /** Gesprächsverlauf einer Meldung und – falls IServ eins anbietet – das Formular zum Antworten */
-data class StoerungVerlauf(val eintraege: List<Eintrag>, val formular: Formular?) {
+data class StoerungVerlauf(val eintraege: List<Eintrag>, val formular: Formular?,
+    /** Profilbilder aus der Seite: Name → Adresse (lädt mit der IServ-Sitzung) */ val avatare: Map<String, String> = emptyMap()) {
+    /** Profilbild zu einem Namen (Groß-/Kleinschreibung und „Admin“ egal) */
+    fun avatar(name: String): String? {
+        fun n(s: String) = s.lowercase().replace(Regex("""\badmin\b"""), "").split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ")
+        val k = n(name); if (k.isEmpty()) return null
+        return avatare.entries.firstOrNull { n(it.key) == k }?.value
+    }
     data class Eintrag(val autor: String, val zeit: String, val text: String)
     data class Formular(val aktion: String, val felder: List<Pair<String, String>>, val textFeld: String)
 }
 
 object Stoerungen {
-    val modulKandidaten = listOf("/iserv/defect", "/iserv/defect/", "/iserv/defects", "/iserv/troubleticket", "/iserv/ticket")
+    val modulKandidaten = listOf("/iserv/report/", "/iserv/defect", "/iserv/defect/", "/iserv/defects", "/iserv/troubleticket", "/iserv/ticket")
     const val MODUL_MUSTER = "st(ö|oe|&ouml;)rung|defect|trouble|ticket"
     private const val ERLEDIGT = "erledigt|geschlossen|behoben|gel(ö|oe)st|abgeschlossen|closed|resolved|done|fertig"
     private const val UNBESETZT = "wer mach|niemand|unbearbeitet|^neu$|^offen$|new|open"
@@ -199,18 +206,50 @@ object Stoerungen {
             if (t.isNotEmpty()) eintraege.add(StoerungVerlauf.Eintrag("", "", t.take(8000)))
         }
         // Ein Block mit mehreren Kommentaren (Sammelbehälter oder ganze Seite): an „Name am 18.11.2026 11:03“ trennen
-        return StoerungVerlauf(bereinigen(eintraege.flatMap(::aufteilen)), formular)
+        return StoerungVerlauf(bereinigen(eintraege.flatMap(::aufteilen)), formular, avatare(html, von))
     }
 
     /** Textbausteine der IServ-Seite (Knöpfe, leere Hinweise, Angaben-Spalten), die in Blasen keinen Sinn ergeben – je ganze Zeile */
-    private val BAUSTEIN = Regex("""(?im)^[ \t]*(?:(?:es\s+(?:gibt|sind)\s+)?(?:noch\s+)?kein(?:e|en)?\s+(?:weitere[nrs]?\s+)?(?:kommentare?|antworten?|text|dateien|anh(?:ä|ae)nge?|beschreibung|nachrichten?)(?:\s+(?:vorhanden|verfügbar|hinzugefügt))?\.?|(?:einen\s+|neuen?\s+)?(?:kommentare?|antwort)\s+(?:hinzufügen|schreiben|verfassen|absenden|abschicken|senden|speichern)|kommentare?(?:\s*\(\d+\))?|antworten|dateien|anh(?:ä|ae)nge?|bearbeiten|l(?:ö|oe)schen|speichern|abbrechen|zur(?:ü|ue)ck|mehr\s+anzeigen|weniger\s+anzeigen|(?:status|raum|ort|ger(?:ä|ae)t|standort|kategorie|priorit(?:ä|ae)t|bearbeiter(?:in)?|zust(?:ä|ae)ndig|gemeldet(?:\s+von)?|erstellt(?:\s+von|\s+am)?|aktualisiert(?:\s+am)?|ge(?:ä|ae)ndert(?:\s+am)?|datum)\s*:.{0,60})[ \t]*$""")
+    private val BAUSTEIN = Regex("""(?im)^[ \t]*(?:(?:es\s+(?:gibt|sind|wurden)\s+)?(?:noch\s+)?kein(?:e|en)?\s+(?:weitere[nrs]?\s+)?(?:kommentare?|antworten?|text|dateien|anh(?:ä|ae)nge?|beschreibung|nachrichten?)(?:\s+(?:vorhanden|verfügbar|hinzugefügt|angeh(?:ä|ae)ngt|hochgeladen))?[.!]?|(?:einen\s+|neuen?\s+)?(?:kommentare?|antwort)\s+(?:hinzufügen|schreiben|verfassen|absenden|abschicken|senden|speichern)|kommentare?(?:\s*\(\d+\))?|antworten|dateien|anh(?:ä|ae)nge?|bearbeiten|l(?:ö|oe)schen|speichern|abbrechen|zur(?:ü|ue)ck(?:\s+zur\s+(?:liste|(?:ü|ue)bersicht))?|details\s+zu\b.{0,80}|mehr\s+anzeigen|weniger\s+anzeigen|(?:status|raum|ort|ger(?:ä|ae)t|standort|kategorie|priorit(?:ä|ae)t|bearbeiter(?:in)?|zust(?:ä|ae)ndig|gemeldet(?:\s+von)?|erstellt(?:\s+von|\s+am)?|aktualisiert(?:\s+am)?|ge(?:ä|ae)ndert(?:\s+am)?|datum)\s*:.{0,60})[ \t]*$""")
+
+    /** Profilbilder der Seite: <img> mit „avatar/profil/photo/picture“ in Adresse oder Klasse und Namen in alt/title */
+    fun avatare(html: String, von: String): Map<String, String> {
+        val m = LinkedHashMap<String, String>()
+        for (tag in Html.alle("""(<img\b[^>]*>)""", html)) {
+            if (!Html.hat("avatar|profil|photo|picture|userimage", tag)) continue
+            val src = Html.attr(tag, "src") ?: continue
+            if (src.startsWith("data:")) continue
+            val name = Html.nameSchoen(Html.entities(Html.attr(tag, "alt") ?: Html.attr(tag, "title") ?: ""))
+                .replace(Regex("""^(?:Profilbild|Avatar|Bild)(?:\s+(?:von|of))?\s*""", RegexOption.IGNORE_CASE), "")
+            if (name.length < 3 || !name.contains(" ") || name in m) continue
+            m[name] = Html.absolut(Html.entities(src), von)
+        }
+        return m
+    }
+
+    private val KOPF_ZEILE = Regex("""\|\s*\d{1,2}\.\d{1,2}\.\d{2,4}\s+\d{1,2}:\d{2}""")
+    private val STATUS = Regex("""(?i)^\|?\s*(eingereicht|in arbeit|wer machts\??|erledigt|abgeschlossen|geschlossen|offen|neu|angenommen|abgelehnt|zurückgestellt)\s*\|?$""")
+
+    /** Kopf der Detailseite („Details zu …“, Titel, „Name | 01.10.2026 07:51“, „| Medienproblem |“, „eingereicht“) – steht schon oben */
+    fun ohneKopf(text: String): String {
+        val z = text.split("\n")
+        val i = z.take(10).indexOfFirst { KOPF_ZEILE.containsMatchIn(it) }
+        if (i < 0) return text
+        var j = i + 1
+        while (j < z.size) {
+            val s = z[j].trim()
+            if (!(s.isEmpty() || STATUS.matches(s) || (s.contains("|") && s.length <= 60))) break
+            j++
+        }
+        return z.drop(j).joinToString("\n")
+    }
 
     /** Textbausteine weg, doppelte Zeilen in einer Blase weg, gleicher Text nur einmal (kurze wie „Danke“ nur je Person) */
     fun bereinigen(l: List<StoerungVerlauf.Eintrag>): List<StoerungVerlauf.Eintrag> {
         val gesehen = HashSet<String>()
         return l.mapNotNull { e ->
             val doppelt = HashSet<String>()
-            val text = e.text.replace(BAUSTEIN, "").split("\n")
+            val text = ohneKopf(e.text).replace(BAUSTEIN, "").split("\n")
                 .filter { z -> val k = z.trim().lowercase(); k.isEmpty() || doppelt.add(k) }
                 .joinToString("\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
             val t = text.lowercase().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ")

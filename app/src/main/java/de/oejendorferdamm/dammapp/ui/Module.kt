@@ -1,6 +1,8 @@
 package de.oejendorferdamm.dammapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.alpha
@@ -149,6 +151,16 @@ private fun StoerungDetail(m: Stoerung) {
     suspend fun laden() { if (m.url.isEmpty()) return
         runCatching { withContext(Dispatchers.IO) { Stoerungen.verlauf(Kern.iservSitzung(), m.url) } }.onSuccess { verlauf = it; fehler = "" }.onFailure { fehler = it.message ?: "IServ nicht erreichbar" } }
     LaunchedEffect(m) { laden() }
+    // Profilbilder aus IServ (Adresse → Bild), mit den gespeicherten Sitzungs-Cookies geladen
+    var bilder by remember { mutableStateOf<Map<String, androidx.compose.ui.graphics.ImageBitmap>>(emptyMap()) }
+    LaunchedEffect(verlauf) {
+        val v = verlauf ?: return@LaunchedEffect
+        if (v.avatare.isEmpty()) return@LaunchedEffect
+        bilder = withContext(Dispatchers.IO) {
+            val s = Kern.iservSitzung(vonHand = false)
+            v.avatare.values.distinct().mapNotNull { u -> s.bild(u)?.let { b -> android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.asImageBitmap()?.let { u to it } } }.toMap()
+        }
+    }
     LazyColumn(Modifier.fillMaxWidth().imePadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Surface(color = m.farbe.copy(alpha = 0.12f), shape = RoundedCornerShape(24.dp)) {
@@ -202,20 +214,26 @@ private fun StoerungDetail(m: Stoerung) {
                     val technik = Stoerungen.istIch(e.autor, Kern.einstellungen.iservBenutzer, Kern.einstellungen.ichName)
                     val farbe = farben[e.autor] ?: namensFarbe(e.autor)
                     val initialen = e.autor.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase().ifEmpty { "?" }
-                    val kreis = @Composable { Box(Modifier.size(30.dp).clip(CircleShape).background(farbe), contentAlignment = Alignment.Center) {
-                        Text(initialen, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) } }
+                    val bild = v?.avatar(e.autor)?.let { bilder[it] }
+                    val kreis = @Composable {
+                        if (bild != null) androidx.compose.foundation.Image(bild, null, Modifier.size(30.dp).clip(CircleShape).border(1.5.dp, farbe, CircleShape),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                        else Box(Modifier.size(30.dp).clip(CircleShape).background(farbe), contentAlignment = Alignment.Center) {
+                            Text(initialen, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
+                    }
                     val uhr = Regex("""\d{1,2}:\d{2}""").find(e.zeit)?.value
                     Row(Modifier.fillMaxWidth().padding(top = if (mitName) 6.dp else 0.dp), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!technik) { Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() }; Spacer(Modifier.width(8.dp)) }
-                        Surface(color = if (technik) MaterialTheme.colorScheme.primary else farbe.copy(alpha = 0.22f),
+                        Surface(color = if (technik) farbe else farbe.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
                             modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(0.82f)) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), horizontalAlignment = if (technik) Alignment.End else Alignment.Start) {
                                 if (mitName && !technik && e.autor.isNotEmpty()) Text(e.autor, style = MaterialTheme.typography.labelMedium, color = farbe, fontWeight = FontWeight.SemiBold)
-                                Text(e.text, style = MaterialTheme.typography.bodyMedium, color = if (technik) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-                                uhr?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (technik) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                                Text(e.text, style = MaterialTheme.typography.bodyMedium, color = if (technik) Color.White else MaterialTheme.colorScheme.onSurface)
+                                uhr?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (technik) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                         }
+                        if (technik) { Spacer(Modifier.width(8.dp)); Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() } }
                     }
                 }
                 if (v != null && v.formular == null) Text("Antworten geht für diese Meldung nur in IServ.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

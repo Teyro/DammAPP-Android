@@ -289,7 +289,7 @@ object Kern {
                     if (f is IServFehler.Zugangsdaten) ablage.text("iservAbgelehnt", iservMerkmal)
                     if (f is IServFehler.NeuerHost) hostFrage = f.host
                     return when (f) {
-                        is IServFehler.NichtGefunden -> "Angemeldet, aber: ${f.message} In den Einstellungen „Neu suchen“ tippen."
+                        is IServFehler.NichtGefunden -> "Angemeldet, aber: ${f.message} In den Einstellungen „Neu suchen“ tippen." + (if (s.protokoll.isEmpty()) "" else " (Geprüft: ${s.protokoll.distinct().take(8).joinToString(", ")})")
                         is IServFehler -> f.message ?: "IServ-Fehler"
                         is java.net.UnknownHostException -> "Keine Verbindung zu ${iservZugang.server} – Internet oder IServ-Adresse prüfen."
                         is java.net.SocketTimeoutException -> "IServ antwortet nicht (Zeitüberschreitung)."

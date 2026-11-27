@@ -1,58 +1,80 @@
 package de.oejendorferdamm.dammapp.kern
 
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
-/** Wie ein Browser: Cookies je Host, Weiterleitungen selbst (damit die Cookies jeder Station ankommen) */
-class Browser(val kekse: Kekse = Kekse()) {
+/**
+ * Wie ein Browser (bzw. URLSession unter iOS): OkHttp folgt allen Weiterleitungen selbst (302/303 → GET, 307/308 behalten POST)
+ * und schickt bei jeder Station die passenden Cookies – mit Domain, Pfad, Ablauf und „secure“ wie im Browser.
+ */
+class Browser(val kekse: Kekse = Kekse(), private val ua: String = Netz.UA) {
     data class Antwort(val text: String, val url: String, val status: Int, val typ: String)
 
-    /** Einfacher Cookie-Speicher je Host (Domain-Cookies gelten auch für Unterhosts) */
-    class Kekse(val daten: MutableMap<String, MutableMap<String, String>> = mutableMapOf()) {
-        @Synchronized fun kopf(host: String): String =
-            daten.filterKeys { host == it || host.endsWith(".$it") }.values.flatMap { it.entries }.joinToString("; ") { "${it.key}=${it.value}" }
-        @Synchronized fun setze(host: String, kopfzeilen: List<String>) {
-            for (z in kopfzeilen) {
-                val teile = z.split(";").map { it.trim() }
-                val nv = teile[0].split("=", limit = 2)
-                val n = nv.getOrNull(0) ?: ""; val v = nv.getOrNull(1) ?: ""
-                if (n.isEmpty()) continue
-                val domain = teile.firstOrNull { it.lowercase().startsWith("domain=") }?.substringAfter("=")?.trimStart('.')?.lowercase() ?: host
-                val weg = teile.any { it.lowercase() == "max-age=0" } || teile.any { it.lowercase().startsWith("expires=") && it.contains("1970") }
-                if (weg || v.isEmpty() || v == "deleted") daten[domain]?.remove(n) else daten.getOrPut(domain) { mutableMapOf() }[n] = v
+    /** Cookie-Speicher wie im Browser; als Text dauerhaft speicherbar (Sitzung bleibt über Neustarts) */
+    class Kekse : CookieJar {
+        private val liste = ArrayList<Pair<String, Cookie>>() // (Host der Antwort, Cookie)
+
+        @Synchronized override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            val jetzt = System.currentTimeMillis()
+            for (c in cookies) {
+                liste.removeAll { (_, x) -> x.name == c.name && x.domain == c.domain && x.path == c.path }
+                if (c.expiresAt > jetzt) liste.add(url.host to c)
             }
         }
-        /** Als Text speichern (eine Zeile je Cookie: domain\tname\twert) */
-        @Synchronized fun text() = daten.flatMap { (d, m) -> m.map { "$d\t${it.key}\t${it.value}" } }.joinToString("\n")
+
+        @Synchronized override fun loadForRequest(url: HttpUrl): List<Cookie> {
+            val jetzt = System.currentTimeMillis()
+            liste.removeAll { it.second.expiresAt <= jetzt }
+            return liste.map { it.second }.filter { it.matches(url) }
+        }
+
+        /** Eine Zeile je Cookie: Host \t Set-Cookie-Text */
+        @Synchronized fun text() = liste.joinToString("\n") { (h, c) -> "$h\t$c" }
+
         companion object {
-            fun aus(text: String) = Kekse().apply { text.lines().forEach { z -> val t = z.split("\t"); if (t.size == 3) daten.getOrPut(t[0]) { mutableMapOf() }[t[1]] = t[2] } }
+            fun aus(text: String) = Kekse().apply {
+                for (z in text.lines()) {
+                    val t = z.split("\t")
+                    val c = when (t.size) {
+                        2 -> "https://${t[0]}/".toHttpUrlOrNull()?.let { u -> Cookie.parse(u, t[1]) }
+                        // altes Format (Domain, Name, Wert)
+                        3 -> runCatching { Cookie.Builder().domain(t[0]).path("/").name(t[1]).value(t[2]).build() }.getOrNull()
+                        else -> null
+                    } ?: continue
+                    liste.add(t[0] to c)
+                }
+            }
         }
     }
 
+    private val netz = basis.newBuilder().cookieJar(kekse).build()
+
     fun anfrage(url: String, methode: String = "GET", kopf: Map<String, String> = emptyMap(), koerper: ByteArray? = null, inhaltTyp: String? = null): Antwort {
-        var adresse = url; var m = methode; var daten = koerper
-        repeat(10) {
-            val u = URL(adresse)
-            val c = u.openConnection() as HttpURLConnection
-            c.instanceFollowRedirects = false
-            c.requestMethod = m; c.connectTimeout = 20_000; c.readTimeout = 20_000
-            c.setRequestProperty("User-Agent", Netz.UA); c.setRequestProperty("Accept-Language", "de-DE,de;q=0.9")
-            kopf.forEach { (k, v) -> c.setRequestProperty(k, v) }
-            kekse.kopf(u.host.lowercase()).takeIf { it.isNotEmpty() }?.let { c.setRequestProperty("Cookie", it) }
-            daten?.let { d -> c.doOutput = true; inhaltTyp?.let { c.setRequestProperty("Content-Type", it) }; c.outputStream.use { it.write(d) } }
-            val status = c.responseCode
-            kekse.setze(u.host.lowercase(), c.headerFields.entries.filter { it.key != null && it.key.equals("Set-Cookie", true) }.flatMap { it.value })
-            val ort = c.getHeaderField("Location")
-            if (status in 300..399 && ort != null) {
-                adresse = Html.absolut(ort, adresse)
-                if (status != 307 && status != 308) { m = "GET"; daten = null }
-                c.disconnect(); return@repeat
-            }
-            val text = runCatching { (if (status >= 400) c.errorStream else c.inputStream)?.use { String(it.readBytes(), Charsets.UTF_8) } }.getOrNull() ?: ""
-            val typ = c.contentType ?: ""
-            c.disconnect()
-            return Antwort(text, adresse, status, typ)
+        val r = Request.Builder().url(url).header("User-Agent", ua).header("Accept-Language", "de-DE,de;q=0.9")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        kopf.forEach { (k, v) -> r.header(k, v) }
+        r.method(methode, koerper?.toRequestBody(inhaltTyp?.toMediaTypeOrNull()) ?: if (methode == "POST") ByteArray(0).toRequestBody() else null)
+        netz.newCall(r.build()).execute().use { a ->
+            return Antwort(a.body?.string() ?: "", a.request.url.toString(), a.code, a.header("Content-Type") ?: "")
         }
-        throw java.io.IOException("Zu viele Weiterleitungen")
+    }
+
+    /** Bild (Profilbild) mit den Cookies der Sitzung; null bei Fehler oder wenn kein Bild zurückkommt */
+    fun bild(url: String): ByteArray? = runCatching {
+        netz.newCall(Request.Builder().url(url).header("User-Agent", ua).header("Accept", "image/*").build()).execute().use { a ->
+            if (a.isSuccessful && (a.header("Content-Type") ?: "").startsWith("image")) a.body?.bytes() else null
+        }
+    }.getOrNull()
+
+    companion object {
+        private val basis = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true).followSslRedirects(true).build()
     }
 }

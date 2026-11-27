@@ -103,11 +103,15 @@ class IServ(val zugang: IServZugang, val erlaubteHosts: Set<String> = emptySet()
 
     // MARK: Netz (Weiterleitungen selbst, damit die Cookies jeder Station ankommen)
 
-    private val browser = Browser(kekse)
+    // wie die iOS-App (Safari auf dem iPhone) – IServ liefert dann dieselben Seiten
+    private val browser = Browser(kekse, "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1")
 
     fun anfrage(url: String, methode: String = "GET", kopf: Map<String, String> = emptyMap(), felder: List<Pair<String, String>>? = null): Seite =
         browser.anfrage(url, methode, kopf, felder?.let { Html.kodiere(it).toByteArray() }, if (felder != null) "application/x-www-form-urlencoded" else null)
             .let { Seite(it.text, it.url, it.status, it.typ) }
+
+    /** Profilbild laden (nur von IServ selbst) */
+    fun bild(url: String): ByteArray? = if (runCatching { URL(url).host.lowercase() }.getOrNull() == zugang.server) browser.bild(url) else null
 
     /** Seite laden; folgt auch <meta refresh> und IServs Zwischenseite /iserv/auth/auth */
     fun hole(pfad: String, kopf: Map<String, String> = emptyMap()): Seite {
@@ -235,6 +239,10 @@ class IServ(val zugang: IServZugang, val erlaubteHosts: Set<String> = emptySet()
         return s
     }
 
+    /** Was die letzte Erkundung probiert hat (Pfad + HTTP-Status) – für die Fehlermeldung */
+    val protokoll = ArrayList<String>()
+    private fun kurz(u: String) = u.replace(Regex("^https?://[^/]+"), "")
+
     /** Erkundung: Navigation → Modulseite → Datenadressen (nur lesen) */
     fun <T> erkunde(muster: String, kandidaten: List<String>, lesen: (Seite, List<String>) -> T?): Pair<IServQuelle, T>? {
         val start = startseite()
@@ -243,7 +251,8 @@ class IServ(val zugang: IServZugang, val erlaubteHosts: Set<String> = emptySet()
         for (url in (nav + kandidaten.map { basis + it }).filter { !aendert(it) }) {
             if (url in gesehen || gesehen.size >= 8) continue
             gesehen.add(url)
-            val s = runCatching { hole(url) }.getOrNull() ?: continue
+            val s = runCatching { hole(url) }.onFailure { protokoll.add("${kurz(url)} ${it.javaClass.simpleName}") }.getOrNull() ?: continue
+            protokoll.add("${kurz(url)} ${s.status}" + if (istLoginSeite(s)) " Login" else "")
             if (s.status >= 400) continue
             lesen(s, emptyList())?.let { return IServQuelle(s.url, "direkt") to it }
             val spalten = Html.spalten(s.body)

@@ -115,17 +115,33 @@ object Aufgaben {
         }
         nimm(b.opt("members") ?: b.opt("users"))
         (anfrage("/api/boards/$id", token = token).first as? JSONObject)?.let { o -> nimm(o.opt("members") ?: o.opt("users") ?: o.opt("participants")) }
-        for (k in liste(anfrage("/api/cards/board/$id", token = token).first)) nimm(k.opt("assignees") ?: k.opt("assigned_users") ?: k.opt("members"), k.optString("color"))
+        for (k in liste(anfrage("/api/cards/board/$id", token = token).first)) {
+            // Karte je Person: Titel = Name („Christian S.“, „Vivi“), Kartenfarbe = Farbe der Person
+            val f = farbNorm(k.optString("color")); val t = k.optString("title").trim()
+            if (f.isNotEmpty() && t.length <= 25 && Regex("""^\p{Lu}[\p{L}.\- ]*$""").matches(t) && t.split(" ").size <= 3) m[t] = "#$f"
+            nimm(k.opt("assignees") ?: k.opt("assigned_users") ?: k.opt("members"), k.optString("color"))
+        }
         m
     }.getOrDefault(emptyMap())
 
-    /** Farbe zu einem Namen: exakt, dann ein Namensteil (z. B. Nachname) */
+    /** Farbe nach Vorname (+ Anfang des Nachnamens): „Christian Stake Admin“ → „Christian S.“, „Viviane Haist“ → „Vivi“ */
     fun farbeFuer(name: String, farben: Map<String, String>): String? {
-        val n = name.trim().lowercase()
-        if (n.isEmpty()) return null
-        farben.entries.firstOrNull { it.key.lowercase() == n }?.let { return it.value }
-        val teile = n.split(Regex("[^\\p{L}]+")).filter { it.length >= 3 }.toSet()
-        return farben.entries.firstOrNull { (k, _) -> k.lowercase().split(Regex("[^\\p{L}]+")).any { it in teile } }?.value
+        fun woerter(s: String) = s.lowercase().split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() && it != "admin" }
+        val n = woerter(name); val vn = n.firstOrNull() ?: return null
+        var best: Pair<Int, String>? = null
+        for ((k, f) in farben.toSortedMap()) {
+            val t = woerter(k); val vk = t.firstOrNull() ?: continue
+            if (vk.length < 3 || !(vn.startsWith(vk) || vk.startsWith(vn))) continue
+            var punkte = 1
+            if (t.size > 1) {
+                // mit Nachname(-Anfang): muss passen (Christian N. ≠ Christian S.)
+                if (n.size < 2 || !(n[1].startsWith(t[1]) || t[1].startsWith(n[1]))) continue
+                punkte = 2 + t[1].length
+            }
+            if (punkte > (best?.first ?: 0)) best = punkte to f
+        }
+        // Rückfall: voller Nachname („Herr Kurz“ → „Ben Kurz“)
+        return best?.second ?: farben.entries.firstOrNull { (k, _) -> woerter(k).let { t -> t.size > 1 && t.last().length >= 3 && t.last() in n } }?.value
     }
 
     // MARK: Kommentare
