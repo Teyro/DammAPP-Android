@@ -317,6 +317,7 @@ object Kern {
         if (e.mitteilungen || e.vertretungMelden || e.vertretungDa) Melder.pruefen(app, ablage,
             if (e.mitteilungen && e.stoerungen) stoerungen else null, if (e.mitteilungen && e.aufgaben) aufgaben else null,
             vertretung, e.vertretungDa, e.vertretungMelden, e.vertretungDringend)
+        if (e.chatMelden) Melder.chat(app, ablage, geheim.matrix, frei, e.chatZusammenfassung)
     }
 
     /** WebUntis: höchstens alle 6 Stunden; mit „übernehmen“ wird die Grundwoche zu „Mein Stundenplan“ */

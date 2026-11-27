@@ -73,6 +73,9 @@ data class Einstellungen(
     val aufgabenFarbe: String = "#76a5af",
     // Mitteilungen
     val mitteilungen: Boolean = false,
+    /** Chat: während der Arbeit sofort, sonst gesammelt um [chatZusammenfassung] */
+    val chatMelden: Boolean = true,
+    val chatZusammenfassung: String = "18:00",
     // Startseite
     val kachelReihenfolge: List<String> = emptyList(),
     val kachelAus: List<String> = emptyList(),

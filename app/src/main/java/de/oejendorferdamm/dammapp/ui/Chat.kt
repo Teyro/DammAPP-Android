@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.oejendorferdamm.dammapp.daten.Kern
+import de.oejendorferdamm.dammapp.daten.Melder
 import de.oejendorferdamm.dammapp.kern.Matrix
 import de.oejendorferdamm.dammapp.kern.Zeit
 import kotlinx.coroutines.Dispatchers
@@ -122,7 +123,7 @@ fun ChatSeite(zurueck: () -> Unit) {
     var suche by remember { mutableStateOf("") }
     var menue by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { Chat.schleife() }
+    LaunchedEffect(Unit) { Melder.chatGelesen(Kern.ablage); Chat.schleife() }
     BackHandler(offen != null) { offen = null }
     offen?.let { id -> ChatRaum(id) { offen = null }; return }
     Seite("Chat", zurueck, aktualisieren = null) {

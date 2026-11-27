@@ -29,11 +29,38 @@ class MatrixTest {
 
 class MatrixPinTest {
     /** Favorit-Tag = angepinnt und oben; Suche in Namen und Nachrichten */
+    @Test fun kennungen() {
+        assertEquals(listOf("vorname.name", "vorname.name@schule.de", "vorname.name@schule.de"),
+            Matrix.kennungen(" Vorname.Name@Schule.de ").map { it.optString("user", it.optString("address")) })
+        assertEquals(1, Matrix.kennungen("vorname.name").size)
+    }
+
     @Test fun anpinnenUndSuchen() {
         val j = """{"next_batch":"s1","rooms":{"join":{"!alt:s":{"account_data":{"events":[{"type":"m.tag","content":{"tags":{"m.favourite":{"order":0.5}}}}]},"state":{"events":[{"type":"m.room.name","state_key":"","content":{"name":"Medien"}}]},"timeline":{"events":[{"type":"m.room.message","event_id":"a1","sender":"@a:s","origin_server_ts":1000,"content":{"body":"Beamer kaputt"}}]}},"!neu:s":{"state":{"events":[{"type":"m.room.name","state_key":"","content":{"name":"Kollegium"}}]},"timeline":{"events":[{"type":"m.room.message","event_id":"a2","sender":"@b:s","origin_server_ts":9000,"content":{"body":"Konferenz"}}]}}}}}"""
         val r = Matrix.einarbeiten(JSONObject(j), emptyList()).first
         assertEquals(listOf("Medien", "Kollegium"), r.map { it.name })
         assertEquals(listOf("Medien"), Matrix.suchen(r, "beamer").map { it.name })
         assertEquals(listOf("Kollegium"), Matrix.suchen(r, "koll").map { it.name })
+    }
+}
+
+class ChatMeldenTest {
+    @Test fun sofortOderSammeln() {
+        val mi = java.time.LocalDateTime.of(2026, 11, 25, 10, 0)
+        assertTrue(de.oejendorferdamm.dammapp.kern.ChatMelden.sofort(mi, emptyList()))
+        assertTrue(!de.oejendorferdamm.dammapp.kern.ChatMelden.sofort(mi.withHour(20), emptyList()))
+        assertTrue(!de.oejendorferdamm.dammapp.kern.ChatMelden.sofort(java.time.LocalDateTime.of(2026, 11, 28, 10, 0), emptyList()))
+        assertTrue(de.oejendorferdamm.dammapp.kern.ChatMelden.faellig(mi.withHour(18), "18:00", "2026-11-24"))
+        assertTrue(!de.oejendorferdamm.dammapp.kern.ChatMelden.faellig(mi.withHour(18), "18:00", "2026-11-25"))
+        assertTrue(!de.oejendorferdamm.dammapp.kern.ChatMelden.faellig(mi.withHour(17), "18:00", null))
+    }
+
+    @Test fun neueUndZusammenfassung() {
+        val j = JSONObject("""{"next_batch":"s2","rooms":{"join":{"!k:s":{"timeline":{"events":[{"type":"m.room.message","event_id":"${'$'}1","sender":"@a:s","origin_server_ts":1000,"content":{"body":"Hallo"}},{"type":"m.room.message","event_id":"${'$'}2","sender":"@ich:s","origin_server_ts":2000,"content":{"body":"Selbst"}}]}}}}}""")
+        val namen = mutableMapOf("!k:s" to "Kollegium")
+        val n = de.oejendorferdamm.dammapp.kern.ChatMelden.neue(j, "@ich:s", namen)
+        assertEquals(listOf("Hallo"), n.map { it.text })
+        assertEquals("Kollegium", n.first().raum)
+        assertEquals("4 neue Chat-Nachrichten" to "Kollegium (3), Medien (1)", de.oejendorferdamm.dammapp.kern.ChatMelden.zusammenfassung(mapOf("Medien" to 1, "Kollegium" to 3)))
     }
 }

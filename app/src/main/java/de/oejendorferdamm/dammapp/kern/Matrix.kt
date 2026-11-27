@@ -55,7 +55,7 @@ class Matrix(val token: String, /** eigene Matrix-ID (@benutzer:server) */ val i
         const val SERVER = "https://s5586.schuldock.de"
         private val netz = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).build()
 
-        /** „@christian.stake:s5586.schuldock.de“ → „christian.stake“ */
+        /** „@vorname.name:s5586.schuldock.de“ → „vorname.name“ */
         fun lokal(id: String) = id.removePrefix("@").substringBefore(":")
         private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
@@ -71,11 +71,23 @@ class Matrix(val token: String, /** eigene Matrix-ID (@benutzer:server) */ val i
             }
         }
 
+        /** IServ-Login ist oft die E-Mail (Schuldock-SSO), der Chat kennt meist nur den Namen davor → nacheinander probieren */
+        fun kennungen(benutzer: String): List<JSONObject> {
+            val b = benutzer.trim().lowercase(); val at = b.indexOf("@")
+            if (at <= 0) return listOf(JSONObject().put("type", "m.id.user").put("user", b))
+            return listOf(JSONObject().put("type", "m.id.user").put("user", b.substring(0, at)),
+                JSONObject().put("type", "m.id.thirdparty").put("medium", "email").put("address", b),
+                JSONObject().put("type", "m.id.user").put("user", b))
+        }
+
         fun anmelden(benutzer: String, passwort: String): Matrix {
-            val j = anfrage("/_matrix/client/v3/login", "POST", koerper = JSONObject().put("type", "m.login.password")
-                .put("identifier", JSONObject().put("type", "m.id.user").put("user", benutzer.trim().lowercase()))
-                .put("password", passwort).put("initial_device_display_name", "DammAPP Android"))
-            return Matrix(j.optString("access_token").ifEmpty { throw AnmeldeFehler() }, j.optString("user_id").ifEmpty { throw AnmeldeFehler() })
+            for (k in kennungen(benutzer)) {
+                val j = try { anfrage("/_matrix/client/v3/login", "POST", koerper = JSONObject().put("type", "m.login.password")
+                    .put("identifier", k).put("password", passwort).put("initial_device_display_name", "DammAPP Android")) } catch (e: AnmeldeFehler) { continue }
+                val t = j.optString("access_token"); val u = j.optString("user_id")
+                if (t.isNotEmpty() && u.isNotEmpty()) return Matrix(t, u)
+            }
+            throw AnmeldeFehler()
         }
 
         /** Angepinnte oben, sonst neueste zuerst */

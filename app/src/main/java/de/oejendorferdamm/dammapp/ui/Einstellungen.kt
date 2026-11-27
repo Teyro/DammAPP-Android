@@ -256,6 +256,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mitteilungen() {
     gruppe("Neuigkeiten", "Ohne Push-Server fragt die App selbst nach: etwa stündlich, fest um 6:45 und nach 13:30, an Schultagen bis 8 Uhr alle 15 Minuten. Android bestimmt den genauen Zeitpunkt. Die Mitteilungen zum Vertretungsplan stehen unter „Schule“.") {
         Schalter("Störungen, Aufgaben und Kommentare melden", x.mitteilungen) { an -> e { it.copy(mitteilungen = an) } }
     }
+    gruppe("Chat", "Während der Arbeit (Schultag 6–17 Uhr) kommt jede Nachricht sofort. Sonst ist Ruhe – dann kommt abends eine Zusammenfassung. Der Chat muss einmal geöffnet worden sein.") {
+        Schalter("Neue Chat-Nachrichten melden", x.chatMelden) { an -> e { it.copy(chatMelden = an) } }
+        if (x.chatMelden) Feld("Zusammenfassung um", x.chatZusammenfassung) { v -> e { it.copy(chatZusammenfassung = v) } }
+    }
     gruppe("System") {
         val c = LocalContext.current
         FilledTonalButton({ c.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, c.packageName)) }) { Text("Mitteilungen in Android einstellen") }
