@@ -7,9 +7,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-/** Feste Farben für Bedeutungen (wie iOS: Vertretung blau, Aufsicht orange, fehlt rot, erledigt grün) */
+/** Feste Farben für Bedeutungen (wie iOS: rot = außerplanmäßig, Aufsicht orange, fehlt rot, erledigt grün) */
 object Farben {
     val vertretung = Color(0xFF1A73E8)
+    /** außerplanmäßig: Vertretung, Begleitung (rot, eigene Stunde rot durchgestrichen) */
+    val ausserplan = Color(0xFFD93025)
     val aufsicht = Color(0xFFE8710A)
     val fehlt = Color(0xFFD93025)
     val gut = Color(0xFF1E8E3E)

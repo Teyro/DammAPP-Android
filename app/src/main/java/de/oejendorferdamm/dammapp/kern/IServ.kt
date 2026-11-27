@@ -91,10 +91,12 @@ class IServ(val zugang: IServZugang, val erlaubteHosts: Set<String> = emptySet()
         /** Adressen, die etwas ändern würden – nie aufrufen */
         fun aendert(u: String) = Html.hat("""logout|abmelden|delete|loeschen|löschen|remove|/add\b|hinzu|/edit\b|bearbeit|/new\b|create|update|confirm|accept|reject|assign|toggle""", u)
 
-        fun datenKandidaten(html: String, von: String): List<String> {
+        fun datenKandidaten(html: String, von: String, muster: String = "absence|abwesen"): List<String> {
             val urls = Html.alle("""(?:data-[a-z-]*(?:url|source|src|endpoint|api)[a-z-]*|src|href|action)=["']([^"']+)["']""", html).map { Html.entities(it) }
                 .filter { Html.hat("json|api|list|data|export|csv|absence|abwesen|sick|krank|defect|ticket", it) && !Html.hat("""\.(css|js|png|svg|ico|woff2?)(\?|$)""", it) }
-                .map { Html.absolut(it, von) }
+                .map { Html.absolut(it, von) } +
+                // auch Pfade aus Skripten (fetch/ajax) wie im alten Abwesenheiten-Widget
+                Html.alle("""["'](/iserv/[^"'\s<>]*(?:$muster)[^"'\s<>]*)["']""", html).map { Html.absolut(Html.entities(it), von) }
             return urls.filter { !aendert(it) }.distinct()
         }
     }
@@ -245,7 +247,7 @@ class IServ(val zugang: IServZugang, val erlaubteHosts: Set<String> = emptySet()
             if (s.status >= 400) continue
             lesen(s, emptyList())?.let { return IServQuelle(s.url, "direkt") to it }
             val spalten = Html.spalten(s.body)
-            val kand = datenKandidaten(s.body, s.url).sortedBy { if (Regex("export|csv").containsMatchIn(it)) 0 else 1 }
+            val kand = datenKandidaten(s.body, s.url, muster).sortedBy { if (Regex("export|csv").containsMatchIn(it)) 0 else 1 }
             for (d in kand.take(8)) {
                 if (d in gesehen) continue
                 gesehen.add(d)

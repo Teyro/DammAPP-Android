@@ -33,6 +33,8 @@ object Kern {
     var wetter by mutableStateOf<Wetter?>(null)
     var frei by mutableStateOf<List<FreierTag>>(emptyList())
     var vertretung by mutableStateOf<VertretungsPlan?>(null)
+    /** Eigene Vertretungs-Statistik (nur über mich), wächst mit jedem geladenen Plan */
+    var statistik by mutableStateOf(VertretungsStatistik())
     var vertretungFehler by mutableStateOf("")
     var untis by mutableStateOf<UntisStand?>(null)
     var untisFehler by mutableStateOf("")
@@ -75,6 +77,7 @@ object Kern {
         geheim = ablage.geheim()
         wetter = ablage.lies("wetter"); frei = ablage.lies("frei") ?: emptyList(); vertretung = ablage.lies("vertretung")
         personenFarben = ablage.lies("personenFarben") ?: emptyMap()
+        statistik = ablage.lies("statistik") ?: VertretungsStatistik()
         untis = ablage.lies("untis"); mensaPlan = ablage.lies("mensa"); obstTage = ablage.lies("obst") ?: emptySet()
         schulTermine = ablage.lies("schultermine") ?: emptyList()
         abwesend = ablage.lies("abwesend"); stoerungen = ablage.lies("stoerungen"); aufgaben = ablage.lies("aufgaben")
@@ -210,7 +213,8 @@ object Kern {
         f.await()?.let { frei = it; ablage.schreib("frei", it); ablage.zeit("frei", System.currentTimeMillis()) }
         when (val r = v.await()) {
             null -> { vertretung = null; vertretungFehler = "" }
-            else -> r.onSuccess { vertretung = it; vertretungFehler = ""; ablage.schreib("vertretung", it) }
+            else -> r.onSuccess { vertretung = it; vertretungFehler = ""; ablage.schreib("vertretung", it)
+                statistik.merken(it).takeIf { s -> s != statistik }?.let { s -> statistik = s; ablage.schreib("statistik", s) } }
                 .onFailure { vertretungFehler = if (it.message?.contains("Passwort") == true) "Freigabe-Passwort fehlt oder stimmt nicht" else "Vertretungsplan nicht erreichbar" }
         }
         when (val r = m.await()) {
@@ -284,7 +288,14 @@ object Kern {
                 fun fehler(f: Throwable): String {
                     if (f is IServFehler.Zugangsdaten) ablage.text("iservAbgelehnt", iservMerkmal)
                     if (f is IServFehler.NeuerHost) hostFrage = f.host
-                    return if (f is IServFehler) f.message ?: "IServ-Fehler" else "IServ nicht erreichbar"
+                    return when (f) {
+                        is IServFehler.NichtGefunden -> "Angemeldet, aber: ${f.message} In den Einstellungen „Neu suchen“ tippen."
+                        is IServFehler -> f.message ?: "IServ-Fehler"
+                        is java.net.UnknownHostException -> "Keine Verbindung zu ${iservZugang.server} – Internet oder IServ-Adresse prüfen."
+                        is java.net.SocketTimeoutException -> "IServ antwortet nicht (Zeitüberschreitung)."
+                        is javax.net.ssl.SSLException -> "IServ: sichere Verbindung fehlgeschlagen (${f.message})."
+                        else -> "IServ nicht erreichbar: ${f.message ?: f.javaClass.simpleName}"
+                    }
                 }
                 if (e.abwesenheiten && alt("abwesend", 10, erzwingen)) runCatching { Abwesenheiten.laden(s, e.abwesendQuelle) }
                     .onSuccess { (st, q) -> abwesend = st; abwesendFehler = ""; ablage.schreib("abwesend", st); ablage.zeit("abwesend", System.currentTimeMillis()); ablage.text("iservAbgelehnt", null)

@@ -44,7 +44,6 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
     }, unten = {
         BottomAppBar(actions = {
             IconButton({ oeffne(Bereich.UNTIS) }) { Icon(Icons.Rounded.ManageSearch, "Stundenpläne suchen") }
-            IconButton({ oeffne(Bereich.FUSSBALL) }) { Icon(Icons.Rounded.SportsSoccer, "Fußballplatz") }
             TextButton({ Sprecher.sprechen(c, Kern.briefing()) }) { Icon(Icons.Rounded.RecordVoiceOver, null); Spacer(Modifier.width(6.dp)); Text("Briefing") }
         }, floatingActionButton = {
             FloatingActionButton({ oeffne(Bereich.STUNDENPLAN) }) { Icon(Icons.Rounded.CalendarViewWeek, "Stundenplan") }
@@ -76,6 +75,11 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
             "mensa" -> if (e.mensa) item { MensaKarte(oeffne) }
             "zahlen" -> item { ZahlenReihe(oeffne) }
             "schultermine" -> if (Kern.schulTermine.isNotEmpty()) item { SchulTermineKarte() }
+            "fussball" -> if (Kern.nextcloudBereit) item {
+                Karte(Icons.Rounded.SportsSoccer, Color(0xFF1E8E3E), "Fußballplatz", onClick = { oeffne(Bereich.FUSSBALL) }) {
+                    Text("Pausenbelegung ansehen ›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             "wetter" -> if (w?.heute != null) item { WetterKarte(w) }
             "termine" -> if (e.termine && Kern.termine.isNotEmpty()) item { TermineKarte() }
         }
@@ -99,7 +103,7 @@ private fun SchulKarte(oeffne: (Bereich) -> Unit) {
             }
         } else if (v != null) {
             if (v.stunden.isEmpty() && v.pausen.isEmpty() && !v.fehlt) Text("✅ Keine Vertretung für dich", color = Farben.gut, fontWeight = FontWeight.Medium)
-            v.stunden.forEach { s -> Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.vertretung, VertretungsPlan.titel(s), Vertretung.haus(s.klasse, e.haeuser).ifEmpty { null }) }
+            v.stunden.forEach { s -> Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.ausserplan, VertretungsPlan.titel(s), Vertretung.haus(s.klasse, e.haeuser).ifEmpty { null }) }
             v.pausen.forEach { p -> Zeile(p.pause.take(1) + ".P", Farben.aufsicht, if (p.reserve) "Aufsicht (Reserve)" else "Hofaufsicht", "${p.pause} · ${p.ort}") }
         } else Text("Noch kein Stundenplan und kein Vertretungsplan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         FehlerText(Kern.vertretungFehler)

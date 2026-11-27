@@ -39,9 +39,12 @@ fun VertretungSeite(zurueck: () -> Unit) {
                 if (p.fehlt) Text("Du bist als fehlend eingetragen", color = Farben.fehlt, fontWeight = FontWeight.SemiBold)
                 if (p.ausserHaus) Text("Du bist außer Haus eingetragen", color = Farben.aufsicht, fontWeight = FontWeight.SemiBold)
                 if (p.stunden.isEmpty() && p.pausen.isEmpty() && !p.fehlt) Text("✅ Keine Vertretung, keine Aufsicht", color = Farben.gut, fontWeight = FontWeight.Medium)
-                p.stunden.forEach { s ->
+                // rot = außerplanmäßig: Vertretung bzw. Begleitung, die eigene Stunde darüber rot durchgestrichen (wie im Stundenplan)
+                val rot = p.datum?.let { Zeit.tag(it) }?.let { t -> Kern.schultag(t).filter { it.art == Block.Art.VERTRETUNG } }.orEmpty()
+                rot.forEach { StundenZeile(it, null, false) }
+                if (rot.isEmpty()) p.stunden.forEach { s ->
                     val h = Vertretung.haus(s.klasse, e.haeuser)
-                    Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.vertretung, VertretungsPlan.titel(s),
+                    Zeile(Stundenplan.stunde(s.stunde) + ".", Farben.ausserplan, VertretungsPlan.titel(s),
                         listOf(if (s.stunde.toIntOrNull() != null) "${s.stunde}. Stunde" else s.stunde, h).filter { it.isNotEmpty() }.joinToString(" · "))
                 }
                 p.pausen.forEach { a -> Zeile(a.pause.take(1) + ".P", Farben.aufsicht, if (a.reserve) "Aufsicht (Reserve)" else "Hofaufsicht", "${a.pause} · ${a.ort}") }
@@ -59,6 +62,33 @@ fun VertretungSeite(zurueck: () -> Unit) {
             }
         }
         if (p.datei.isNotEmpty()) item { Text("Datei: ${p.datei.removeSuffix(".docx")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (Kern.statistik.tage.isNotEmpty()) item { StatistikKarte() }
+    }
+}
+
+/** Nur über mich: wie oft war ich rot (außerplanmäßig) eingeteilt – diesen Monat und dieses Schuljahr */
+@Composable
+private fun StatistikKarte() {
+    val s = Kern.statistik
+    val m = s.zahlen(VertretungsStatistik.monatsBeginn()); val j = s.zahlen(VertretungsStatistik.schuljahrBeginn())
+    Karte(Icons.Rounded.BarChart, Farben.ausserplan, "Deine Statistik") {
+        @Composable fun zeile(t: String, a: Int, b: Int, farbe: Color, kopf: Boolean = false) = Row(Modifier.fillMaxWidth()) {
+            val stil = if (kopf) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium
+            Text(t, Modifier.weight(1f), style = stil)
+            listOf(a, b).forEach { Text(if (kopf) (if (it == 0) "Monat" else "Schuljahr") else "$it", Modifier.width(76.dp), style = stil, color = farbe,
+                fontWeight = if (kopf) FontWeight.Normal else FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+        }
+        zeile("", 0, 1, MaterialTheme.colorScheme.onSurfaceVariant, kopf = true)
+        zeile("Vertretungsstunden", m.vertretungen, j.vertretungen, Farben.ausserplan)
+        zeile("Tage mit Vertretung", m.rotTage, j.rotTage, Farben.ausserplan)
+        zeile("Begleitungen", m.begleitungen, j.begleitungen, Farben.ausserplan)
+        zeile("Aufsichten", m.aufsichten, j.aufsichten, Farben.aufsicht)
+        if (j.fehlt > 0) zeile("Selbst gefehlt", m.fehlt, j.fehlt, MaterialTheme.colorScheme.onSurfaceVariant)
+        if (j.ausserHaus > 0) zeile("Außer Haus", m.ausserHaus, j.ausserHaus, MaterialTheme.colorScheme.onSurfaceVariant)
+        j.klasse?.let { Text("Am öftesten vertreten: $it", style = MaterialTheme.typography.bodyMedium) }
+        j.wochentag?.let { Text("Häufigster Tag: " + it.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.GERMAN), style = MaterialTheme.typography.bodyMedium) }
+        Text("Nur über dich und nur auf diesem Gerät. Gezählt werden die Pläne, die die App geladen hat (${j.tage} Schultage in diesem Schuljahr).",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

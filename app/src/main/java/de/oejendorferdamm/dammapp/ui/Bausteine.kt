@@ -101,7 +101,7 @@ fun Zeile(marke: String, farbe: Color, titel: String, unter: String? = null, onC
 @Composable
 fun StundenZeile(b: Block, wetter: PausenWetter?, laeuft: Boolean) {
     val grau = MaterialTheme.colorScheme.onSurfaceVariant
-    val farbe = when (b.art) { Block.Art.VERTRETUNG -> Farben.vertretung; Block.Art.AUFSICHT -> Farben.aufsicht; else -> grau }
+    val farbe = when (b.art) { Block.Art.VERTRETUNG -> Farben.ausserplan; Block.Art.AUFSICHT -> Farben.aufsicht; else -> grau }
     val abweichend = b.art == Block.Art.VERTRETUNG || b.art == Block.Art.AUFSICHT || b.ersetzt != null
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
         .background(when { abweichend -> farbe.copy(alpha = 0.10f); laeuft -> MaterialTheme.colorScheme.secondaryContainer; else -> Color.Transparent }).padding(6.dp),
@@ -111,7 +111,7 @@ fun StundenZeile(b: Block, wetter: PausenWetter?, laeuft: Boolean) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            b.ersetzt?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = grau, textDecoration = TextDecoration.LineThrough) }
+            b.ersetzt?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Farben.ausserplan.copy(alpha = 0.85f), textDecoration = TextDecoration.LineThrough) }
             val text = if (b.art == Block.Art.AUFSICHT) (if (b.text.startsWith("Reserve")) "Aufsicht (Reserve) · " else "Hofaufsicht · ") + b.text.removePrefix("Aufsicht ").removePrefix("Reserve ") else b.text
             Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
                 color = if (b.art == Block.Art.FREI || b.art == Block.Art.PAUSE) grau else MaterialTheme.colorScheme.onSurface)
@@ -168,9 +168,18 @@ fun hexFarbe(hex: String): androidx.compose.ui.graphics.Color =
     de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(hex).toLongOrNull(16)?.let { androidx.compose.ui.graphics.Color(0xFF000000 or it) } ?: androidx.compose.ui.graphics.Color.Gray
 
 /** Feste Farbe aus einem Namen (gleicher Name = gleiche Farbe) */
-fun namensFarbe(name: String): androidx.compose.ui.graphics.Color {
-    val palette = listOf(0xFF1E88E5, 0xFF43A047, 0xFFFB8C00, 0xFF8E24AA, 0xFFD81B60, 0xFF00897B, 0xFF3949AB, 0xFF6D4C41, 0xFF00ACC1, 0xFF7CB342)
-    return androidx.compose.ui.graphics.Color(palette[Math.floorMod(name.lowercase().hashCode(), palette.size)])
+private val namensPalette = listOf(0xFF1E88E5, 0xFF43A047, 0xFFFB8C00, 0xFF8E24AA, 0xFFD81B60, 0xFF00897B, 0xFF3949AB, 0xFF6D4C41, 0xFF00ACC1, 0xFF7CB342)
+
+fun namensFarbe(name: String): androidx.compose.ui.graphics.Color =
+    androidx.compose.ui.graphics.Color(namensPalette[Math.floorMod(name.lowercase().hashCode(), namensPalette.size)])
+
+/** Je Person eine Farbe: Vorgabe, sonst aus der Palette ohne Doppelte (erst wenn alle vergeben, wieder nach Name) */
+fun personenFarben(namen: List<String>, vorgabe: (String) -> androidx.compose.ui.graphics.Color?): Map<String, androidx.compose.ui.graphics.Color> {
+    val frei = namensPalette.toMutableList()
+    val aus = LinkedHashMap<String, androidx.compose.ui.graphics.Color>()
+    for (n in namen) if (n !in aus) aus[n] = vorgabe(n)
+        ?: if (frei.isEmpty()) namensFarbe(n) else androidx.compose.ui.graphics.Color(frei.removeAt(Math.floorMod(n.lowercase().hashCode(), frei.size)))
+    return aus
 }
 
 /** Kartenfarbe für Edupool: „Alle“ (keine Farbe = jede Karte) oder eine Farbe von den Boards, dazu frei als #rrggbb */

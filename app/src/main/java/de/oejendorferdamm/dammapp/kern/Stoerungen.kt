@@ -199,6 +199,22 @@ object Stoerungen {
             if (t.isNotEmpty()) eintraege.add(StoerungVerlauf.Eintrag("", "", t.take(8000)))
         }
         // Ein Block mit mehreren Kommentaren (Sammelbehälter oder ganze Seite): an „Name am 18.11.2026 11:03“ trennen
-        return StoerungVerlauf(eintraege.flatMap(::aufteilen), formular)
+        return StoerungVerlauf(bereinigen(eintraege.flatMap(::aufteilen)), formular)
+    }
+
+    /** Textbausteine der IServ-Seite (Knöpfe, leere Hinweise, Angaben-Spalten), die in Blasen keinen Sinn ergeben – je ganze Zeile */
+    private val BAUSTEIN = Regex("""(?im)^[ \t]*(?:(?:es\s+(?:gibt|sind)\s+)?(?:noch\s+)?kein(?:e|en)?\s+(?:weitere[nrs]?\s+)?(?:kommentare?|antworten?|text|dateien|anh(?:ä|ae)nge?|beschreibung|nachrichten?)(?:\s+(?:vorhanden|verfügbar|hinzugefügt))?\.?|(?:einen\s+|neuen?\s+)?(?:kommentare?|antwort)\s+(?:hinzufügen|schreiben|verfassen|absenden|abschicken|senden|speichern)|kommentare?(?:\s*\(\d+\))?|antworten|dateien|anh(?:ä|ae)nge?|bearbeiten|l(?:ö|oe)schen|speichern|abbrechen|zur(?:ü|ue)ck|mehr\s+anzeigen|weniger\s+anzeigen|(?:status|raum|ort|ger(?:ä|ae)t|standort|kategorie|priorit(?:ä|ae)t|bearbeiter(?:in)?|zust(?:ä|ae)ndig|gemeldet(?:\s+von)?|erstellt(?:\s+von|\s+am)?|aktualisiert(?:\s+am)?|ge(?:ä|ae)ndert(?:\s+am)?|datum)\s*:.{0,60})[ \t]*$""")
+
+    /** Textbausteine weg, doppelte Zeilen in einer Blase weg, gleicher Text nur einmal (kurze wie „Danke“ nur je Person) */
+    fun bereinigen(l: List<StoerungVerlauf.Eintrag>): List<StoerungVerlauf.Eintrag> {
+        val gesehen = HashSet<String>()
+        return l.mapNotNull { e ->
+            val doppelt = HashSet<String>()
+            val text = e.text.replace(BAUSTEIN, "").split("\n")
+                .filter { z -> val k = z.trim().lowercase(); k.isEmpty() || doppelt.add(k) }
+                .joinToString("\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
+            val t = text.lowercase().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ")
+            if (t.isEmpty() || !gesehen.add(if (t.length >= 20) t else e.autor + "|" + t)) null else e.copy(text = text)
+        }
     }
 }

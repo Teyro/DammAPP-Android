@@ -167,10 +167,12 @@ private fun StoerungDetail(m: Stoerung) {
                 Angabe(Icons.Rounded.Flag, m.farbe, "Status", m.status)
             } }
         }
-        item {
+        // leere Beschreibung und eine, die im Verlauf schon als Blase steht, nicht zeigen
+        fun norm(s: String) = s.lowercase().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ")
+        if (m.inhalt.isNotEmpty() && verlauf?.eintraege?.none { norm(it.text) == norm(m.inhalt) } != false) item {
             Card { Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Beschreibung", style = MaterialTheme.typography.titleSmall)
-                Text(m.inhalt.ifEmpty { "Kein weiterer Text." }, color = if (m.inhalt.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                Text(m.inhalt)
             } }
         }
         if (m.url.isNotEmpty()) item {
@@ -183,6 +185,8 @@ private fun StoerungDetail(m: Stoerung) {
                 val liste = v?.eintraege.orEmpty().mapIndexed { i, e -> if (i == 0 && e.autor.isEmpty()) e.copy(autor = m.autor, zeit = m.datum?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) ?: e.zeit) else e }
                 fun tag(z: String) = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{2,4})""").find(z)?.destructured?.let { (d, mo, j) ->
                     runCatching { java.time.LocalDate.of(j.toInt().let { if (it < 100) 2000 + it else it }, mo.toInt(), d.toInt()) }.getOrNull() }
+                // jede Person eine eigene Farbe wie im WhatsApp-Gruppenchat: aus dem Board „Medien“, sonst der Reihe nach ohne Doppelte
+                val farben = personenFarben(liste.map { it.autor }) { Aufgaben.farbeFuer(it, Kern.personenFarben)?.let(::hexFarbe) }
                 fun tagText(t: java.time.LocalDate) = when (t) { Zeit.heute() -> "Heute"; Zeit.heute().minusDays(1) -> "Gestern"
                     else -> t.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", java.util.Locale.GERMAN)) }
                 liste.forEachIndexed { i, e ->
@@ -196,14 +200,14 @@ private fun StoerungDetail(m: Stoerung) {
                     val mitName = neuerTag || vorher?.autor != e.autor
                     // eigene Nachrichten rechts in der Akzentfarbe (angemeldeter IServ-Benutzer bzw. „Ich bin“), alle anderen links
                     val technik = Stoerungen.istIch(e.autor, Kern.einstellungen.iservBenutzer, Kern.einstellungen.ichName)
-                    val farbe = Aufgaben.farbeFuer(e.autor, Kern.personenFarben)?.let(::hexFarbe) ?: namensFarbe(e.autor)
+                    val farbe = farben[e.autor] ?: namensFarbe(e.autor)
                     val initialen = e.autor.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase().ifEmpty { "?" }
                     val kreis = @Composable { Box(Modifier.size(30.dp).clip(CircleShape).background(farbe), contentAlignment = Alignment.Center) {
                         Text(initialen, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) } }
                     val uhr = Regex("""\d{1,2}:\d{2}""").find(e.zeit)?.value
                     Row(Modifier.fillMaxWidth().padding(top = if (mitName) 6.dp else 0.dp), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!technik) { Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() }; Spacer(Modifier.width(8.dp)) }
-                        Surface(color = if (technik) MaterialTheme.colorScheme.primary else farbe.copy(alpha = 0.16f),
+                        Surface(color = if (technik) MaterialTheme.colorScheme.primary else farbe.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
                             modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(0.82f)) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), horizontalAlignment = if (technik) Alignment.End else Alignment.Start) {

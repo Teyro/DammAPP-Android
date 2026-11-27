@@ -68,6 +68,8 @@ dependencies {
     implementation("androidx.glance:glance-material3:1.1.0")
     implementation("androidx.browser:browser:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    // Nextcloud-Ordner listen: Androids HttpURLConnection kennt kein WebDAV-PROPFIND
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

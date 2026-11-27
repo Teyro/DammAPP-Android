@@ -1,5 +1,8 @@
 package de.oejendorferdamm.dammapp.kern
 
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+
 /** Nextcloud der Schule über WebDAV: Ordner auflisten und Dateien laden (z. B. die Fußballplatz-Pläne in „DammAPP“) */
 class Nextcloud(private val server: String, private val benutzer: String, private val passwort: String) {
     @kotlinx.serialization.Serializable
@@ -21,10 +24,14 @@ class Nextcloud(private val server: String, private val benutzer: String, privat
     }
 
     fun liste(pfad: String): List<Datei> {
-        val a = Netz.anfrage(url(pfad), "PROPFIND", mapOf("Authorization" to auth, "Depth" to "1", "Content-Type" to "application/xml"),
-            """<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:getcontentlength/><d:resourcetype/></d:prop></d:propfind>""".toByteArray())
-        pruefen(a.status, "Ordner „$pfad“")
-        return lesen(a.text)
+        // OkHttp statt Netz.anfrage: HttpURLConnection lehnt die Methode PROPFIND ab
+        val koerper = """<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:getcontentlength/><d:resourcetype/></d:prop></d:propfind>"""
+        val r = okhttp3.Request.Builder().url(url(pfad)).header("Authorization", auth).header("Depth", "1").header("User-Agent", Netz.UA)
+            .method("PROPFIND", koerper.toRequestBody("application/xml; charset=utf-8".toMediaType())).build()
+        geteilt.newCall(r).execute().use { a ->
+            pruefen(a.code, "Ordner „$pfad“")
+            return lesen(a.body?.string() ?: "")
+        }
     }
 
     fun laden(pfad: String): ByteArray {
@@ -35,6 +42,7 @@ class Nextcloud(private val server: String, private val benutzer: String, privat
 
     companion object {
         const val PLAN_ORDNER = "DammAPP"
+        private val geteilt = okhttp3.OkHttpClient.Builder().callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
 
         /** PROPFIND-Antwort → Dateien (der erste Eintrag ist der Ordner selbst) */
         fun lesen(xml: String): List<Datei> = Regex("""<(?:d|D):response>([\s\S]*?)</(?:d|D):response>""").findAll(xml).drop(1).mapNotNull { m ->

@@ -22,10 +22,10 @@ object Mitnehmen {
 
 /** Reihenfolge der Kacheln auf der Startseite (wie iOS, ohne Wecker und Post) */
 object Startseite {
-    val alle = listOf("schule", "mensa", "zahlen", "schultermine", "wetter", "termine")
+    val alle = listOf("schule", "mensa", "zahlen", "schultermine", "fussball", "wetter", "termine")
     fun vollstaendig(eigen: List<String>, inDerSchule: Boolean): List<String> {
         val r = eigen.filter { it in alle }.toMutableList()
-        if (r.isEmpty()) return if (inDerSchule) alle else listOf("termine", "wetter", "schule", "mensa", "zahlen", "schultermine")
+        if (r.isEmpty()) return if (inDerSchule) alle else listOf("termine", "wetter", "schule", "mensa", "zahlen", "schultermine", "fussball")
         alle.forEach { if (it !in r) r.add(it) }
         return r
     }

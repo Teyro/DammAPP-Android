@@ -133,7 +133,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.aussehen() {
         Schalter("Material You", Kern.einstellungen.dynamischeFarben) { an -> e { it.copy(dynamischeFarben = an) } }
     }
     gruppe("Startseite", "Schalter: Kachel zeigen oder ausblenden. Pfeile: verschieben. Ohne eigene Reihenfolge steht in der Schulzeit die Schule oben, sonst die Termine.") {
-        val namen = mapOf("schule" to "Schule (Stunden und Vertretung)", "mensa" to "Mensa", "zahlen" to "Fehlen · Störungen · Aufgaben", "schultermine" to "Schultermine", "wetter" to "Wetter", "termine" to "Termine")
+        val namen = mapOf("schule" to "Schule (Stunden und Vertretung)", "mensa" to "Mensa", "zahlen" to "Fehlen · Störungen · Aufgaben", "schultermine" to "Schultermine", "fussball" to "Fußballplatz", "wetter" to "Wetter", "termine" to "Termine")
         val r = Startseite.vollstaendig(Kern.einstellungen.kachelReihenfolge, Kern.inDerSchule)
         r.forEachIndexed { i, k ->
             Row(verticalAlignment = Alignment.CenterVertically) {

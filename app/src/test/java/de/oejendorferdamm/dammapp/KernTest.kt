@@ -156,4 +156,27 @@ class KernTest {
         assertEquals("gemeldet um 18:40 Uhr", Abwesenheiten.gemeldetText(a[0], LocalDate.of(2026, 11, 22)))
         assertNull(Abwesenheiten.ausCSV("Name;Von\nKim;23.11.2026\n")!![0].gemeldet)
     }
+
+    /** Textbausteine („Kein weiterer Kommentar“, „Kommentar hinzufügen“, Angaben-Spalten) und Wiederholungen fliegen raus */
+    @Test fun chatBereinigen() {
+        fun e(a: String, t: String) = StoerungVerlauf.Eintrag(a, "", t)
+        val l = listOf(e("", "Das Board bleibt schwarz.\nStatus: Neu\nRaum: 104\nDas Board bleibt schwarz.\nKein weiterer Kommentar."),
+            e("Kim Muster", "Kommentar hinzufügen"), e("Kim Muster", "Schaue ich mir morgen an."), e("Kim Muster", "Schaue ich mir  morgen an."),
+            e("Kim Muster", "Danke"), e("Linda Beutel", "Danke"))
+        assertEquals(listOf("Das Board bleibt schwarz.", "Schaue ich mir morgen an.", "Danke", "Danke"), Stoerungen.bereinigen(l).map { it.text })
+    }
+
+    /** Eigene Statistik: späterer Stand ersetzt, leere Vorlage zählt nicht, Reserve-Aufsicht nicht */
+    @Test fun statistik() {
+        val p = VertretungsPlan(datum = "2026-11-23", belegt = 5).apply {
+            stunden.add(VertretungsPlan.Stunde("2", "2c")); pausen.add(VertretungsPlan.Pause("1. Pause", "Hof")); pausen.add(VertretungsPlan.Pause("2. Pause", "Mensa", true))
+            bemerkungen = listOf(Bemerkung(listOf(3, 4, 5), "Begleitung Nelson", "2c"))
+        }
+        var s = VertretungsStatistik().merken(p).merken(p.copy(stunden = mutableListOf(VertretungsPlan.Stunde("1", "4a"))))
+        s = s.merken(VertretungsPlan(datum = "2026-11-24", belegt = 3).apply { stunden.add(VertretungsPlan.Stunde("5", "4a")) }).merken(VertretungsPlan(datum = "2026-11-25"))
+        val z = s.zahlen("2026-11-01")
+        assertEquals(listOf(2, 2, 2, 1, 3), listOf(z.tage, z.vertretungen, z.rotTage, z.aufsichten, z.begleitungen))
+        assertEquals("4a", z.klasse)
+        assertEquals("2025-08-01", VertretungsStatistik.schuljahrBeginn(LocalDate.of(2026, 3, 2)))
+    }
 }
