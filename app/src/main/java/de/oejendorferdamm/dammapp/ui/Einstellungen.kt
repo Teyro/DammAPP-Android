@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import de.oejendorferdamm.dammapp.BuildConfig
 import de.oejendorferdamm.dammapp.daten.Einstellungen
 import de.oejendorferdamm.dammapp.daten.Geheimnisse
-import de.oejendorferdamm.dammapp.daten.HAAktion
 import de.oejendorferdamm.dammapp.daten.Kern
 import de.oejendorferdamm.dammapp.kern.IServ
 import de.oejendorferdamm.dammapp.kern.Startseite
@@ -37,11 +36,10 @@ import kotlinx.coroutines.withContext
 private enum class Unterseite(val titel: String, val symbol: ImageVector, val farbe: Color) {
     // Reihenfolge wie in der iOS-App
     AUSSEHEN("Aussehen und Startseite", Icons.Rounded.Palette, Color(0xFFD81B60)),
-    NACHT("Wetter und Nacht", Icons.Rounded.Bedtime, Color(0xFFE8710A)),
+    NACHT("Wetter", Icons.Rounded.WbSunny, Color(0xFFE8710A)),
     SCHULE("Schule", Icons.Rounded.School, Color(0xFF1A73E8)),
     ISERV("IServ und Edupool", Icons.Rounded.Groups, Color(0xFF00897B)),
     MITTEILUNGEN("Mitteilungen", Icons.Rounded.NotificationsActive, Color(0xFFD93025)),
-    ZUHAUSE("Zuhause (Home Assistant)", Icons.Rounded.Home, Color(0xFF0B8043)),
     WEITERES("Kalender und Region", Icons.Rounded.CalendarMonth, Color(0xFF5F6368)),
     UEBER("Über DammAPP", Icons.Rounded.Info, Color(0xFF3949AB)),
 }
@@ -72,11 +70,10 @@ fun EinstellungenSeite(zurueck: () -> Unit) {
     } else Seite(s.titel, { seite = null }, aktualisieren = null) {
         when (s) {
             Unterseite.AUSSEHEN -> aussehen()
-            Unterseite.NACHT -> { wetter(); guteNacht() }
+            Unterseite.NACHT -> wetter()
             Unterseite.SCHULE -> { schule(); essen() }
             Unterseite.ISERV -> iserv()
             Unterseite.MITTEILUNGEN -> mitteilungen()
-            Unterseite.ZUHAUSE -> zuhause()
             Unterseite.WEITERES -> weiteres()
             Unterseite.UEBER -> ueber()
         }
@@ -88,11 +85,10 @@ private fun zusammenfassung(u: Unterseite): String {
     fun an(b: Boolean) = if (b) "an" else "aus"
     return when (u) {
         Unterseite.AUSSEHEN -> "Material You ${an(e.dynamischeFarben)} · ${Startseite.ordnung(e.kachelReihenfolge, e.kachelAus, true).size} Kacheln"
-        Unterseite.NACHT -> e.ortName.ifEmpty { "kein Ort" } + " · Gute Nacht: ${e.nacht.size} Aktionen"
+        Unterseite.NACHT -> e.ortName.ifEmpty { "kein Ort" }
         Unterseite.SCHULE -> listOf(e.kuerzel.ifEmpty { "kein Kürzel" }, "WebUntis ${an(e.untisAn)}", "Mensa ${an(e.mensa)}", "Obst ${an(e.obst)}").joinToString(" · ")
         Unterseite.ISERV -> "Abwesenheiten ${an(e.abwesenheiten)} · Störungen ${an(e.stoerungen)} · Edupool ${an(e.aufgaben)}"
         Unterseite.MITTEILUNGEN -> "Störungen und Aufgaben ${an(e.mitteilungen)}"
-        Unterseite.ZUHAUSE -> if (Kern.ha.eingerichtet) "verbunden" else "nicht eingerichtet"
         Unterseite.WEITERES -> "Kalender ${an(e.termine)} · ${e.bundesland}"
         Unterseite.UEBER -> "Version ${BuildConfig.VERSION_NAME}"
     }
@@ -169,6 +165,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.schule() {
         Schalter("5 Minuten vor der Hofaufsicht erinnern", x.aufsichtErinnern) { an -> e { it.copy(aufsichtErinnern = an) } }
         Schalter("„Mitnehmen“ (Sportzeug, Regenjacke …)", x.mitnehmen) { an -> e { it.copy(mitnehmen = an) } }
     }
+    gruppe("Nextcloud der Schule", "Kommt mit dem Schul-Code im Einrichtungs-Assistenten von selbst. Ohne eigenen Untis-Zugang holt die App deinen Stundenplan aus der Untis-Sicherung dort – eine Übergangslösung, die später abgeschaltet wird; ein eigener Untis-Zugang wird empfohlen und hat immer Vorrang.") {
+        Feld("Server (https://…)", x.nextcloudServer, tastatur = KeyboardType.Uri) { v -> e { it.copy(nextcloudServer = v.trim()) } }
+        Feld("Benutzer", x.nextcloudBenutzer) { v -> e { it.copy(nextcloudBenutzer = v.trim()) } }
+        Feld("App-Passwort", Kern.geheim.nextcloud, geheim = true) { v -> g { it.copy(nextcloud = v.trim()) } }
+    }
     gruppe("WebUntis", "In WebUntis auf deinen Namen → Freigaben → „Zugriff über Untis Mobile“ → Anzeigen. Url, Schule, Benutzer und Schlüssel abtippen – damit klappt es auch mit zweitem Faktor, ohne Passwort. Von Hand Eingetragenes bleibt – Untis füllt nur freie Stunden. Fällt WebUntis aus, nimmt die App die tägliche Untis-Sicherung aus dem Schul-Ordner.") {
         Schalter("WebUntis verbinden", x.untisAn) { an -> e { it.copy(untisAn = an) } }
         if (x.untisAn) {
@@ -214,7 +215,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.iserv() {
         Feld("Benutzer", x.iservBenutzer) { v -> e { it.copy(iservBenutzer = v.trim()) }; Kern.ablage.text("iservAbgelehnt", null) }
         Feld("Passwort", Kern.geheim.iserv, geheim = true) { v -> g { it.copy(iserv = v) }; Kern.ablage.text("iservAbgelehnt", null) }
         Feld("2FA-Schlüssel (optional)", Kern.geheim.totp, geheim = true) { v -> g { it.copy(totp = v.replace(" ", "")) } }
-        Schalter("Abwesenheiten (Kinder fehlen)", x.abwesenheiten) { an -> e { it.copy(abwesenheiten = an) } }
+        Feld("Ich bin (Name in Kommentaren, leer = automatisch)", x.ichName) { v -> e { it.copy(ichName = v.trim()) } }
+        Schalter("Abwesenheiten", x.abwesenheiten) { an -> e { it.copy(abwesenheiten = an) } }
         if (x.abwesenheiten) {
             Feld("Nur diese Klassen (z. B. 2a, 2b) – leer = alle", x.abwesendKlassen) { v -> e { it.copy(abwesendKlassen = v) } }
             Schalter("Sichtschutz im Widget (nur Vorname)", x.sichtschutz) { an -> e { it.copy(sichtschutz = an) } }
@@ -257,25 +259,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mitteilungen() {
     gruppe("System") {
         val c = LocalContext.current
         FilledTonalButton({ c.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, c.packageName)) }) { Text("Mitteilungen in Android einstellen") }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.zuhause() {
-    val x = Kern.einstellungen
-    gruppe("Verbindung", "Token: in Home Assistant unten links auf deinen Namen → Sicherheit → Langlebige Zugriffstoken. Gebraucht für „Gute Nacht“ (unter „Wetter und Nacht“).") {
-        Feld("Adresse (https://…)", x.haAdresse, tastatur = KeyboardType.Uri) { v -> e { it.copy(haAdresse = v.trim()) } }
-        Feld("Token", Kern.geheim.ha, geheim = true) { v -> g { it.copy(ha = v.trim()) } }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.guteNacht() {
-    val x = Kern.einstellungen
-    gruppe("Gute Nacht", "Je Zeile eine Aktion: Name | Dienst | Ziel, z. B. „Alle Lichter aus | light.turn_off | all“. Danach bleibt die Nachtlampe gedimmt an, offene Fenster werden genannt.") {
-        Feld("Aktionen", x.nacht.joinToString("\n") { "${it.name} | ${it.dienst} | ${it.ziel}" }, mehrzeilig = true) { v ->
-            e { it.copy(nacht = v.lines().mapNotNull { z -> z.split("|").map(String::trim).takeIf { t -> t.size >= 2 && t[1].contains(".") }?.let { t -> HAAktion(t[0], t[1], t.getOrElse(2) { "" }) } }) }
-        }
-        Feld("Nachtlampe (light.…)", x.nachtlampe) { v -> e { it.copy(nachtlampe = v.trim()) } }
-        Feld("Helligkeit der Nachtlampe (%)", x.nachtlampeHelligkeit.toString(), tastatur = KeyboardType.Number) { v -> v.toIntOrNull()?.let { h -> e { it.copy(nachtlampeHelligkeit = h.coerceIn(1, 100)) } } }
     }
 }
 

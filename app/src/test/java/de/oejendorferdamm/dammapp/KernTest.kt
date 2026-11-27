@@ -113,10 +113,31 @@ class KernTest {
     @Test fun abwesendZahl() {
         val tag = LocalDate.of(2026, 11, 23)
         val l = listOf("Anna Beispiel", "Ben Muster", "Cem Probe").map { Abwesenheit(it, "", "2026-11-23", "2026-11-23", "krank") }
-        assertEquals("3" to "fehlen", Abwesenheiten.zahl(l, emptyList(), null, tag))
+        assertEquals("3" to "abwesend", Abwesenheiten.zahl(l, emptyList(), null, tag))
         assertEquals("2", Abwesenheiten.zahl(l, listOf(" ben muster "), null, tag).first)
         val p = VertretungsPlan(datum = "2026-11-23").apply { fehlen = listOf("Kru", "Kut", "Reh", "Kha", "Beu"); ausserListe = listOf("Ayd", "Wa+Hoff (8:30-12:15)") }
         assertEquals("5 + 3" to "krank + außer Haus", Abwesenheiten.zahl(l, emptyList(), p, tag))
         assertEquals("3", Abwesenheiten.zahl(l, emptyList(), p, tag.plusDays(1)).first)
+    }
+
+    /** IServ-Seite ohne Kommentar-Klassen: an „Name am Datum Uhrzeit“ in einzelne Blasen trennen (auch zwei Kommentare derselben Person) */
+    @Test fun chatKommentareGetrennt() {
+        val html = """<main><h1>Verbindung zum Tablet</h1><p>Das Tablet verbindet sich nicht mit dem Board.</p><h2>Kommentare</h2>
+            <div class="panel"><div class="panel-heading">Christian Stake am 18.11.2026 11:03</div><div class="panel-body">Schaue ich mir an.</div></div>
+            <div class="panel"><div class="panel-heading">Christian Stake am 18.11.2026 11:05</div><div class="panel-body">Kabel getauscht<br>Bitte testen.</div></div>
+            <div class="panel"><div class="panel-heading">Linda Beutel am 19.11.2026 08:00</div><div class="panel-body">Danke, geht wieder!</div></div></main>"""
+        val e = Stoerungen.verlaufAus(html, "https://s5586.schuldock.de/iserv/report/show/50").eintraege
+        assertEquals(4, e.size)
+        assertTrue(e[0].text.contains("verbindet sich nicht"))
+        assertEquals(StoerungVerlauf.Eintrag("Christian Stake", "18.11.2026 11:03", "Schaue ich mir an."), e[1])
+        assertEquals("Kabel getauscht\nBitte testen.", e[2].text)
+        assertEquals("Linda Beutel", e[3].autor)
+        // Sammelbehälter „comments“ macht nicht alles zu einer Blase
+        val s = """<main><div class="comments"><div class="comment"><span class="author">Kim Muster</span><time>19.11.2026 08:15</time><p>Eins</p></div>
+            <div class="comment"><span class="author">Kim Muster</span><time>19.11.2026 08:16</time><p>Zwei</p></div></div></main>"""
+        assertEquals(listOf("Eins", "Zwei"), Stoerungen.verlaufAus(s, "https://schule.de/x").eintraege.map { it.text })
+        assertTrue(Stoerungen.istIch("Christian Stake-Admin", "christian.stake"))
+        assertFalse(Stoerungen.istIch("Linda Beutel", "christian.stake"))
+        assertTrue(Stoerungen.istIch("Linda Beutel", "christian.stake", "Linda Beutel"))
     }
 }

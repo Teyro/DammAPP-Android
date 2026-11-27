@@ -133,7 +133,7 @@ fun wetterEmoji(code: Int) = when (code) {
     0, 1 -> "☀️"; 2 -> "⛅"; 3 -> "☁️"; 45, 48 -> "🌫️"; in 51..57 -> "🌦️"; in 61..67, in 80..82 -> "🌧️"; in 71..77, 85, 86 -> "🌨️"; in 95..99 -> "⛈️"; else -> "☁️"
 }
 
-/** Kleine Zahl-Kachel (Kinder fehlen, Störungen, Aufgaben) */
+/** Kleine Zahl-Kachel (Abwesend, Störungen, Aufgaben) */
 @Composable
 fun ZahlKachel(symbol: ImageVector, farbe: Color, zahl: String, text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     ElevatedCard(modifier.clip(CardDefaults.elevatedShape).clickable(onClick = onClick), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {

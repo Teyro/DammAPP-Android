@@ -17,7 +17,7 @@ Material 3 (Material You, Hell- und Dunkelmodus). Gegenstück zur iOS-App [Guten
 - **Widget „Schultag“** mit gleich großen Kästen für Fehlen, Störungen und Aufgaben
 - **Schultag-Benachrichtigung** (was läuft, wie lange noch, was danach kommt) und **Erinnerung 5 Minuten vor der Hofaufsicht**
 - **Mitteilungen**: neuer Vertretungsplan (optional dringend), Plan betrifft dich, neue Störungen und Zustandswechsel, neue/verschobene Aufgaben, neue Kommentare
-- **Briefing** zum Vorlesen, **Gute Nacht** über Home Assistant (Aktionen, Nachtlampe, offene Fenster)
+- **Briefing** zum Vorlesen
 
 ## Installieren
 
@@ -35,17 +35,12 @@ Passwörter und Schlüssel liegen verschlüsselt im Android-Schlüsselspeicher d
 
 ## Ausgelassen (Fehlende Funktionen)
 
-Gegenüber der iOS-App fehlen – auf Wunsch oder (noch) aus technischen Gründen:
+Gegenüber der DammAPP für iOS fehlen – aus technischen Gründen:
 
 | Funktion | Warum |
 |---|---|
-| Wecker, Weckmusik, Nachtmodus | auf Wunsch weggelassen |
-| Post & Pakete | auf Wunsch weggelassen |
-| Morgenroutine in Home Assistant | hängt an der Weckzeit (Wecker fehlt) |
-| Anfahrt (früher wecken bei Stau oder Glätte) | hängt am Wecker; bräuchte außerdem einen Routen-Dienst |
-| Personaldaten (Gehaltsabrechnung) | braucht eine eigene Browser-Automatik fürs Portal – noch nicht übertragen |
 | QR-Code-Scanner für WebUntis | Url, Schule, Benutzer und Schlüssel werden abgetippt |
-| Apple Watch, Apple Health, Fokus „Schule“, Siri/Kurzbefehle | gibt es nur auf dem iPhone |
+| Fokus „Schule“, Siri/Kurzbefehle | gibt es nur auf dem iPhone |
 | Live-Aktivität | stattdessen die dauerhafte Schultag-Benachrichtigung mit Countdown |
 | Echte Push-Mitteilungen | ohne eigenen Server nicht möglich – die App fragt selbst nach: etwa stündlich, fest um 6:45 und nach 13:30, an Schultagen bis 8 Uhr alle 15 Minuten |
 | Übernahme aus „Mein Tag“ (Scriptable) | gibt es nur auf dem iPhone |

@@ -20,6 +20,7 @@ data class SchulVorgaben(
     val vertretungLink: String = "", val freigabe: String = "", val schulOrdner: String = "", val mensaAdresse: String = "",
     val obstKalender: String = "", val schulKalender: String = "", val iservServer: String = "", val untisLink: String = "",
     val untisSchule: String = "", val bundesland: String = "", val haeuser: Map<String, List<String>> = emptyMap(),
+    val nextcloudServer: String = "", val nextcloudBenutzer: String = "", val nextcloudPasswort: String = "",
 ) {
     class FalscherCode : Exception("Der Schul-Code stimmt nicht.")
 

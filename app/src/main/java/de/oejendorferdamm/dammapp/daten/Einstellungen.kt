@@ -7,9 +7,6 @@ import de.oejendorferdamm.dammapp.kern.Schulzeit
 import de.oejendorferdamm.dammapp.kern.Unterricht
 import kotlinx.serialization.Serializable
 
-/** Eine Home-Assistant-Aktion, z. B. „Alle Lichter aus“ = light.turn_off auf „all“ */
-@Serializable
-data class HAAktion(val name: String, val dienst: String, val ziel: String)
 
 /** Alle Einstellungen (ohne Passwörter – die liegen verschlüsselt in [Geheim]) */
 @Serializable
@@ -61,6 +58,11 @@ data class Einstellungen(
     val abwesendKlassen: String = "",
     /** Ausgegraut: stehen in der Liste, zählen aber nicht mit */
     val abwesendAus: List<String> = emptyList(),
+    /** Nextcloud der Schule (WebDAV): Untis-Sicherung – das App-Passwort liegt in [Geheimnisse] */
+    val nextcloudServer: String = "",
+    val nextcloudBenutzer: String = "",
+    /** Störungs-Chat: so heiße ich in den Kommentaren (leer = aus dem IServ-Benutzer erkannt) */
+    val ichName: String = "",
     val sichtschutz: Boolean = true,
     val abwesendQuelle: IServQuelle? = null,
     val stoerungen: Boolean = false,
@@ -71,11 +73,6 @@ data class Einstellungen(
     val aufgabenFarbe: String = "#76a5af",
     // Mitteilungen
     val mitteilungen: Boolean = false,
-    // Home Assistant (Gute Nacht)
-    val haAdresse: String = "",
-    val nacht: List<HAAktion> = listOf(HAAktion("Alle Lichter aus", "light.turn_off", "all")),
-    val nachtlampe: String = "",
-    val nachtlampeHelligkeit: Int = 15,
     // Startseite
     val kachelReihenfolge: List<String> = emptyList(),
     val kachelAus: List<String> = emptyList(),
@@ -97,9 +94,10 @@ data class Geheimnisse(
     val iserv: String = "",
     val totp: String = "",
     val edupool: String = "",
-    val ha: String = "",
     val untisPasswort: String = "",
     val untisSchluessel: String = "",
     /** Passwort der Freigabe „Schul-Ordner“ – für die Untis-Sicherung, wenn WebUntis ausfällt */
     val schulOrdner: String = "",
+    /** App-Passwort der Schul-Nextcloud */
+    val nextcloud: String = "",
 )

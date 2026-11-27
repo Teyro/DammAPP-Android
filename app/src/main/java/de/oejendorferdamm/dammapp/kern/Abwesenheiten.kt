@@ -144,7 +144,7 @@ object Abwesenheiten {
             return if (a > 0) "$k + $a" to "krank + außer Haus" else "$k" to "krank"
         }
         val n = liste.count { !ausgegraut(it, aus) }
-        return "$n" to if (n == 1) "fehlt" else "fehlen"
+        return "$n" to "abwesend"
     }
 
     /** Wer fehlt am Zieltag: nach Klassen gefiltert, jede Person einmal, ganztägig zuerst */

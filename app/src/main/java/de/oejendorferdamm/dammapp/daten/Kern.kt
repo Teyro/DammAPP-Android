@@ -95,7 +95,6 @@ object Kern {
     val obstSchultag get() = einstellungen.obstBereit && schulTag.toString() in obstTage
     val wetterSchultag get() = if (schulTag == Zeit.heute()) wetter?.heute else wetter?.morgen
     val mitnehmen get() = if (einstellungen.mitnehmen) Mitnehmen.hinweise(schultag(), wetterSchultag) else emptyList()
-    val ha get() = HomeAssistant(einstellungen.haAdresse, geheim.ha)
     val inDerSchule get() = !Zeit.wochenende(Zeit.heute()) && freiHeute == null && Zeit.jetzt().hour in 6..14
     val abwesendAmTag get() = Abwesenheiten.amTag(abwesend?.eintraege ?: emptyList(), schulTag, einstellungen.klassenListe)
     /** Zahl und Wort für die Kachel: IServ ohne Ausgegraute, ab Vertretungsplan „krank + außer Haus“ */
@@ -128,7 +127,13 @@ object Kern {
         ablage.schreib("untisFavoriten", untisFavoriten)
     }
 
-    private fun sicherung(): String? = sicherungText ?: geheim.schulOrdner.takeIf { it.isNotEmpty() }?.let { runCatching { UntisSicherung.laden(it) }.getOrNull() }?.also { sicherungText = it }
+    /** App-Zugang der Schul-Nextcloud vollständig? */
+    val nextcloudBereit get() = einstellungen.nextcloudServer.isNotEmpty() && einstellungen.nextcloudBenutzer.isNotEmpty() && geheim.nextcloud.isNotEmpty()
+
+    /** Untis-Sicherung: zuerst aus der Nextcloud der Schule (ein Zugang für alles), sonst aus dem Schul-Ordner */
+    private fun sicherung(): String? = sicherungText
+        ?: (if (nextcloudBereit) runCatching { UntisSicherung.ladenNextcloud(einstellungen.nextcloudServer, einstellungen.nextcloudBenutzer, geheim.nextcloud) }.getOrNull() else null)?.also { sicherungText = it }
+        ?: geheim.schulOrdner.takeIf { it.isNotEmpty() }?.let { runCatching { UntisSicherung.laden(it) }.getOrNull() }?.also { sicherungText = it }
 
     /** Liste aller Klassen, Lehrkräfte und Räume: aus WebUntis, sonst aus der Untis-Sicherung (läuft im Hintergrund-Thread) */
     fun untisSucheVorbereiten(neu: Boolean = false) {
@@ -170,7 +175,18 @@ object Kern {
         }
     }
 
+    /** Schon eingerichtete Geräte: Nextcloud-Zugang aus den Schul-Vorgaben nachholen (Schul-Code = Schul-Ordner-Passwort) */
+    private fun nextcloudNachruesten() {
+        if (geheim.nextcloud.isNotEmpty() || geheim.schulOrdner.isEmpty() || !alt("vorgaben", 720, false)) return
+        ablage.zeit("vorgaben", System.currentTimeMillis())
+        val v = runCatching { SchulVorgaben.laden(geheim.schulOrdner) }.getOrNull() ?: return
+        if (v.nextcloudPasswort.isEmpty()) return
+        aendere { it.copy(nextcloudServer = it.nextcloudServer.ifEmpty { v.nextcloudServer }, nextcloudBenutzer = it.nextcloudBenutzer.ifEmpty { v.nextcloudBenutzer }) }
+        aendereGeheim { it.copy(nextcloud = v.nextcloudPasswort) }
+    }
+
     private suspend fun laden(erzwingen: Boolean) = coroutineScope {
+        nextcloudNachruesten()
         launch { runCatching { updateSuchen() } }
         val e = einstellungen; val g = geheim
         val ziel = schulTag.toString()
@@ -287,16 +303,26 @@ object Kern {
     /** WebUntis: höchstens alle 6 Stunden; mit „übernehmen“ wird die Grundwoche zu „Mein Stundenplan“ */
     fun untisLaden(erzwingen: Boolean = false) {
         val e = einstellungen; val g = geheim
-        if (!e.untisAn || e.untisLink.isEmpty() || (g.untisPasswort.isEmpty() && g.untisSchluessel.isEmpty() && Untis.qr(e.untisLink) == null)) return
+        // Echter Untis-Zugang schlägt die Sicherung; ohne eigenen Zugang reicht das Kürzel (Übergangslösung über die Nextcloud)
+        val eigen = e.untisAn && e.untisLink.isNotEmpty() && (g.untisPasswort.isNotEmpty() || g.untisSchluessel.isNotEmpty() || Untis.qr(e.untisLink) != null)
+        val ersatz = e.untisName.isNotEmpty() && (nextcloudBereit || g.schulOrdner.isNotEmpty())
+        if (!eigen && !ersatz) return
         if (!alt("untis", 360, erzwingen)) return
         val kuerzel = e.untisName
-        val st = runCatching { Untis.laden(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase(), kuerzel) }
+        val st = runCatching {
+            if (!eigen) throw java.io.IOException("Kein eigener Untis-Zugang.")
+            Untis.laden(e.untisLink, e.untisSchule, e.untisBenutzer, g.untisPasswort, g.untisSchluessel.replace(" ", "").uppercase(), kuerzel)
+        }
             .onSuccess { untisFehler = "" }
             .getOrElse { fehler ->
-                // WebUntis fällt aus: die tägliche Untis-Sicherung aus dem Schul-Ordner
-                val s = if (g.schulOrdner.isNotEmpty()) runCatching { UntisSicherung.lesen(UntisSicherung.laden(g.schulOrdner), kuerzel) }.getOrNull() else null
-                untisFehler = if (s != null) "WebUntis nicht erreichbar – Stand aus der Untis-Sicherung vom " + s.stand.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm")) + "."
-                    else fehler.message ?: "WebUntis nicht erreichbar"
+                // WebUntis fällt aus oder kein eigener Zugang: die tägliche Untis-Sicherung (Nextcloud, sonst Schul-Ordner)
+                val s = sicherung()?.let { runCatching { UntisSicherung.lesen(it, kuerzel) }.getOrNull() }
+                val stand = s?.stand?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm"))
+                untisFehler = when {
+                    s == null -> fehler.message ?: "WebUntis nicht erreichbar"
+                    eigen -> "WebUntis nicht erreichbar – Stand aus der Untis-Sicherung vom $stand."
+                    else -> "Übergangslösung: Stundenplan aus der Untis-Sicherung der Schule (Stand $stand). Ein eigener Untis-Zugang wird empfohlen."
+                }
                 s
             } ?: return
         untis = st; ablage.schreib("untis", st); ablage.zeit("untis", System.currentTimeMillis())
@@ -339,19 +365,4 @@ object Kern {
         haeuser = einstellungen.haeuser, mensa = if (einstellungen.mensa) mensaTag else null, mensaWahl = einstellungen.favoriten to einstellungen.meiden,
         gemerkt = einstellungen.lieblingsGerichte to einstellungen.nichtLecker, obst = obstSchultag, schulTag = schulTag, frei = freiHeute,
         schultag = schultag(), mitnehmen = einstellungen.mitnehmen))
-
-    /** Gute Nacht: Home-Assistant-Aktionen, Nachtlampe, offene Fenster – Text zum Vorlesen */
-    suspend fun guteNacht(): String = withContext(Dispatchers.IO) {
-        val h = ha
-        if (!h.eingerichtet) return@withContext "Home Assistant ist noch nicht eingerichtet."
-        val erledigt = einstellungen.nacht.filter { h.ausfuehren(it) }.map { it.name }.toMutableList()
-        val fenster = h.offeneFenster()
-        if (einstellungen.nachtlampe.isNotEmpty() && h.nachtlampe(einstellungen.nachtlampe, einstellungen.nachtlampeHelligkeit)) erledigt.add("Nachtlampe an")
-        val s = ArrayList<String>()
-        if (erledigt.isNotEmpty()) s.add(Stundenplan.aufzaehlen(erledigt) + " – erledigt.")
-        fenster.take(4).forEach { s.add("Achtung: $it ist offen.") }
-        wetter?.let { s.add(it.satz(true)) }
-        s.add("Gute Nacht!")
-        s.joinToString(" ")
-    }
 }

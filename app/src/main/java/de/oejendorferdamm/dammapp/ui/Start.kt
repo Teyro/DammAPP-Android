@@ -18,7 +18,7 @@ import de.oejendorferdamm.dammapp.kern.*
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-/** Vorlesen (Briefing, Gute Nacht) */
+/** Vorlesen (Briefing) */
 object Sprecher {
     private var tts: TextToSpeech? = null
     fun sprechen(c: android.content.Context, text: String) {
@@ -44,8 +44,6 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
         BottomAppBar(actions = {
             IconButton({ oeffne(Bereich.UNTIS) }) { Icon(Icons.Rounded.ManageSearch, "Stundenpläne suchen") }
             TextButton({ Sprecher.sprechen(c, Kern.briefing()) }) { Icon(Icons.Rounded.RecordVoiceOver, null); Spacer(Modifier.width(6.dp)); Text("Briefing") }
-            if (Kern.ha.eingerichtet) TextButton({ scope.launch { val t = Kern.guteNacht(); Kern.meldung = t; Sprecher.sprechen(c, t) } }) {
-                Icon(Icons.Rounded.Bedtime, null); Spacer(Modifier.width(6.dp)); Text("Gute Nacht") }
         }, floatingActionButton = {
             FloatingActionButton({ oeffne(Bereich.STUNDENPLAN) }) { Icon(Icons.Rounded.CalendarViewWeek, "Stundenplan") }
         })

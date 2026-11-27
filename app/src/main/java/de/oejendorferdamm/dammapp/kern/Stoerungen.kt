@@ -113,7 +113,37 @@ object Stoerungen {
 
     // MARK: Verlauf und Antworten
 
-    private const val EINTRAG = """<(div|li|article|section|tr)\b[^>]*class=["'][^"']*\b(comment|kommentar|reply|antwort|answer|message|nachricht|history|verlauf|activity|timeline-item|post)[^"']*["'][^>]*>"""
+    // ganze Wörter: „comment“, „comment-item“ ja – Sammelbehälter wie „comments“/„messages“ nicht
+    private const val EINTRAG = """<(div|li|article|section|tr)\b[^>]*class=["'](?:[^"']*\s)?(comment|kommentar|reply|antwort|answer|message|nachricht|activity|timeline-item|post)(?:-[\w-]*)?(?=[\s"'])[^"']*["'][^>]*>"""
+
+    /** Kommentarkopf wie in IServ: „Christian Stake am 18.11.2026 11:03“ (auch „…, 11:03 Uhr“) am Zeilenanfang */
+    private val KOPF = Regex("""(?m)^[ \t]*([A-ZÄÖÜ][\p{L}'.]+(?:[ -][A-ZÄÖÜ][\p{L}'.]+){0,3})[ \t]+am[ \t]+(\d{1,2}\.\d{1,2}\.\d{2,4})(?:,?[ \t]*(?:um[ \t]*)?(\d{1,2}:\d{2}))?(?:[ \t]*Uhr)?[ \t]*:?[ \t]*\n?""")
+
+    /** Ein Eintrag mit mehreren Kommentarköpfen → je Kommentar ein Eintrag (der Text davor bleibt beim ursprünglichen Absender) */
+    fun aufteilen(e: StoerungVerlauf.Eintrag): List<StoerungVerlauf.Eintrag> {
+        val treffer = KOPF.findAll(e.text).toList()
+        if (treffer.isEmpty()) return listOf(e)
+        fun sauber(t: String) = t.replace(Regex("""(?m)^[ \t]*(Kommentare|Kommentar|Dateien|Antworten)[ \t]*$"""), "").trim()
+        val aus = ArrayList<StoerungVerlauf.Eintrag>()
+        sauber(e.text.substring(0, treffer[0].range.first)).takeIf { it.isNotEmpty() }?.let { aus.add(e.copy(text = it)) }
+        treffer.forEachIndexed { i, m ->
+            val ende = if (i + 1 < treffer.size) treffer[i + 1].range.first else e.text.length
+            val text = sauber(e.text.substring(m.range.last + 1, ende))
+            val zeit = listOf(m.groupValues[2], m.groupValues[3]).filter { it.isNotEmpty() }.joinToString(" ")
+            if (text.isNotEmpty()) aus.add(StoerungVerlauf.Eintrag(Html.nameSchoen(m.groupValues[1]), zeit, text))
+        }
+        return aus.ifEmpty { listOf(e) }
+    }
+
+    /** Bin das ich? IServ-Benutzer „christian.stake“ ↔ „Christian Stake“ / „Christian Stake-Admin“; [ichName] von Hand hat Vorrang */
+    fun istIch(autor: String, benutzer: String, ichName: String = ""): Boolean {
+        fun norm(s: String) = s.lowercase().replace(Regex("""[-\s]*\(?admin\)?$"""), "").replace(Regex("[._-]"), " ").trim()
+        val a = norm(autor)
+        if (a.isEmpty()) return false
+        if (ichName.isNotBlank()) return a == norm(ichName)
+        val b = norm(benutzer.substringBefore('@'))
+        return b.isNotEmpty() && (a == b || a.startsWith("$b "))
+    }
 
     fun verlauf(s: IServ, url: String): StoerungVerlauf {
         s.hostPruefen(url)
@@ -168,6 +198,7 @@ object Stoerungen {
             val t = Html.absatzText(inhalt)
             if (t.isNotEmpty()) eintraege.add(StoerungVerlauf.Eintrag("", "", t.take(8000)))
         }
-        return StoerungVerlauf(eintraege, formular)
+        // Ein Block mit mehreren Kommentaren (Sammelbehälter oder ganze Seite): an „Name am 18.11.2026 11:03“ trennen
+        return StoerungVerlauf(eintraege.flatMap(::aufteilen), formular)
     }
 }

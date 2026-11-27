@@ -34,6 +34,7 @@ fun SchulVorgaben.anwenden(e: Einstellungen) = e.copy(
     iservServer = if (iservServer.isEmpty()) e.iservServer else IServ.bereinige(iservServer),
     untisLink = untisLink.ifEmpty { e.untisLink }, untisSchule = untisSchule.ifEmpty { e.untisSchule },
     bundesland = bundesland.ifEmpty { e.bundesland }, haeuser = haeuser.ifEmpty { e.haeuser },
+    nextcloudServer = nextcloudServer.ifEmpty { e.nextcloudServer }, nextcloudBenutzer = nextcloudBenutzer.ifEmpty { e.nextcloudBenutzer },
 )
 
 /** Einrichtungs-Assistent: Schule (eingebaute oder eigene Zugänge), Kürzel, Mensa, Untis, IServ – Vorhandenes ist vorausgefüllt */
@@ -56,8 +57,8 @@ fun AssistentSeite() {
             try {
                 val v = withContext(Dispatchers.IO) { SchulVorgaben.laden(code) }
                 e { v.anwenden(it) }
-                g { it.copy(freigabe = v.freigabe.ifEmpty { it.freigabe }, schulOrdner = v.schulOrdner.ifEmpty { it.schulOrdner }) }
-                geladen = true; meldung = "Vertretungsplan, Mensa-Portal, Schulobst, Untis und IServ der Schule sind eingetragen."
+                g { it.copy(freigabe = v.freigabe.ifEmpty { it.freigabe }, schulOrdner = v.schulOrdner.ifEmpty { it.schulOrdner }, nextcloud = v.nextcloudPasswort.ifEmpty { it.nextcloud }) }
+                geladen = true; meldung = "Vertretungsplan, Nextcloud, Mensa-Portal, Schulobst, Untis und IServ der Schule sind eingetragen."
             } catch (t: Throwable) { geladen = false; meldung = t.message ?: "Fehler beim Laden" }
             laedt = false
         }
@@ -111,6 +112,10 @@ fun AssistentSeite() {
                                 Eingabe("Freigabe-Link des Vertretungsplan-Ordners", x.vertretungLink, tastatur = KeyboardType.Uri) { v -> e { it.copy(vertretungLink = v.trim()) } }
                                 Eingabe("Passwort der Freigabe", Kern.geheim.freigabe, geheim = true) { v -> g { it.copy(freigabe = v) } }
                                 Eingabe("Schul-Ordner-Passwort (Untis-Sicherung)", Kern.geheim.schulOrdner, geheim = true) { v -> g { it.copy(schulOrdner = v) } }
+                                Hinweis("Nextcloud der Schule (für die Untis-Sicherung):")
+                                Eingabe("Server, z. B. https://cloud.schule.de", x.nextcloudServer, tastatur = KeyboardType.Uri) { v -> e { it.copy(nextcloudServer = v.trim()) } }
+                                Eingabe("Benutzer", x.nextcloudBenutzer) { v -> e { it.copy(nextcloudBenutzer = v.trim()) } }
+                                Eingabe("App-Passwort", Kern.geheim.nextcloud, geheim = true) { v -> g { it.copy(nextcloud = v) } }
                             }
                         }
                         Schritt.KUERZEL -> {
@@ -151,7 +156,7 @@ fun AssistentSeite() {
                                 Umschalter("Abwesenheiten", x.abwesenheiten) { v -> e { it.copy(abwesenheiten = v) } }
                                 Umschalter("Störungsmeldungen", x.stoerungen) { v -> e { it.copy(stoerungen = v) } }
                             }
-                            Hinweis("Für fehlende Kinder und Störungsmeldungen. Edupool-Aufgaben verbindest du später in den Einstellungen.")
+                            Hinweis("Für Abwesenheiten (wer an der Schule heute nicht da ist) und Störungsmeldungen. Edupool-Aufgaben verbindest du später in den Einstellungen.")
                         }
                         Schritt.FERTIG -> {
                             Icon(Icons.Rounded.Verified, null, Modifier.size(56.dp), tint = Color(0xFF0B8043))

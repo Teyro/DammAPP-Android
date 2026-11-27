@@ -104,7 +104,7 @@ class SchultagWidget : GlanceAppWidget() {
     private fun Zahlen(c: Context) {
         val e = Kern.einstellungen
         val k = buildList {
-            if (e.abwesenheiten) add(Triple("Fehlen", Kern.abwesendZahl.first, "abwesend"))
+            if (e.abwesenheiten) add(Triple("Abwesend", Kern.abwesendZahl.first, "abwesend"))
             if (e.stoerungen) add(Triple("Störungen", (Kern.stoerungen?.offen?.size ?: 0).toString(), "stoerungen"))
             if (e.aufgaben) add(Triple("Aufgaben", (Kern.aufgaben?.offen?.size ?: 0).toString(), "aufgaben"))
         }

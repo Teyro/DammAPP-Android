@@ -179,23 +179,39 @@ private fun StoerungDetail(m: Stoerung) {
                 val v = verlauf
                 if (v == null && fehler.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text("Lade Verlauf …") }
                 // Jeder Kommentar eine Blase wie im Chat: Technik rechts, alle anderen links; Farbe je Person aus dem Board „Medien“
-                v?.eintraege?.forEach { e ->
-                    val technik = m.bearbeiter.isNotEmpty() && e.autor.isNotEmpty() && (e.autor.contains(m.bearbeiter, true) || m.bearbeiter.contains(e.autor, true))
+                // Erste Nachricht ohne Absender = die Meldung selbst; jede Nachricht eigene Blase, Name nur beim Absenderwechsel, Datum als Trenner
+                val liste = v?.eintraege.orEmpty().mapIndexed { i, e -> if (i == 0 && e.autor.isEmpty()) e.copy(autor = m.autor, zeit = m.datum?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) ?: e.zeit) else e }
+                fun tag(z: String) = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{2,4})""").find(z)?.destructured?.let { (d, mo, j) ->
+                    runCatching { java.time.LocalDate.of(j.toInt().let { if (it < 100) 2000 + it else it }, mo.toInt(), d.toInt()) }.getOrNull() }
+                fun tagText(t: java.time.LocalDate) = when (t) { Zeit.heute() -> "Heute"; Zeit.heute().minusDays(1) -> "Gestern"
+                    else -> t.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", java.util.Locale.GERMAN)) }
+                liste.forEachIndexed { i, e ->
+                    val vorher = liste.getOrNull(i - 1)
+                    val t = tag(e.zeit)
+                    val neuerTag = t != null && t != vorher?.let { tag(it.zeit) }
+                    if (neuerTag) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(tagText(t!!), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 10.dp, vertical = 3.dp))
+                    }
+                    val mitName = neuerTag || vorher?.autor != e.autor
+                    // eigene Nachrichten rechts in der Akzentfarbe (angemeldeter IServ-Benutzer bzw. „Ich bin“), alle anderen links
+                    val technik = Stoerungen.istIch(e.autor, Kern.einstellungen.iservBenutzer, Kern.einstellungen.ichName)
                     val farbe = Aufgaben.farbeFuer(e.autor, Kern.personenFarben)?.let(::hexFarbe) ?: namensFarbe(e.autor)
                     val initialen = e.autor.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase().ifEmpty { "?" }
                     val kreis = @Composable { Box(Modifier.size(30.dp).clip(CircleShape).background(farbe), contentAlignment = Alignment.Center) {
                         Text(initialen, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) } }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
-                        if (!technik) { kreis(); Spacer(Modifier.width(8.dp)) }
-                        Surface(color = farbe.copy(alpha = 0.16f), shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
-                            modifier = Modifier.fillMaxWidth(0.82f)) {
-                            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                if (e.autor.isNotEmpty() || e.zeit.isNotEmpty()) Text(listOf(e.autor, e.zeit).filter { it.isNotEmpty() }.joinToString(" · "),
-                                    style = MaterialTheme.typography.labelMedium, color = farbe, fontWeight = FontWeight.SemiBold)
-                                Text(e.text, style = MaterialTheme.typography.bodyMedium)
+                    val uhr = Regex("""\d{1,2}:\d{2}""").find(e.zeit)?.value
+                    Row(Modifier.fillMaxWidth().padding(top = if (mitName) 6.dp else 0.dp), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
+                        if (!technik) { Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() }; Spacer(Modifier.width(8.dp)) }
+                        Surface(color = if (technik) MaterialTheme.colorScheme.primary else farbe.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
+                            modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(0.82f)) {
+                            Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), horizontalAlignment = if (technik) Alignment.End else Alignment.Start) {
+                                if (mitName && !technik && e.autor.isNotEmpty()) Text(e.autor, style = MaterialTheme.typography.labelMedium, color = farbe, fontWeight = FontWeight.SemiBold)
+                                Text(e.text, style = MaterialTheme.typography.bodyMedium, color = if (technik) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                uhr?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (technik) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                         }
-                        if (technik) { Spacer(Modifier.width(8.dp)); kreis() }
                     }
                 }
                 if (v != null && v.formular == null) Text("Antworten geht für diese Meldung nur in IServ.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

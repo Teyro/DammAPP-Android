@@ -17,6 +17,19 @@ object UntisSicherung {
     /** Kennung der Freigabe „Schul-Ordner“ (das Passwort trägt jede Lehrkraft selbst ein) */
     const val FREIGABE = "mxmLySXtyzC6XFp"
 
+    /** Aus der Nextcloud der Schule (WebDAV, Ordner „Untis“) – mit dem App-Zugang aus den Schul-Vorgaben */
+    fun ladenNextcloud(server: String, benutzer: String, passwort: String): String {
+        var s = server.trim().trimEnd('/'); if (!s.startsWith("http")) s = "https://$s"
+        val v = URL("$s/remote.php/dav/files/" + java.net.URLEncoder.encode(benutzer, "UTF-8").replace("+", "%20") + "/Untis/untis-plan.json").openConnection() as HttpURLConnection
+        v.connectTimeout = 15_000; v.readTimeout = 30_000
+        v.setRequestProperty("Authorization", "Basic " + android.util.Base64.encodeToString("$benutzer:$passwort".toByteArray(), android.util.Base64.NO_WRAP))
+        try {
+            if (v.responseCode == 401) throw java.io.IOException("Nextcloud: App-Passwort falsch.")
+            if (v.responseCode != 200) throw java.io.IOException("Untis-Sicherung in der Nextcloud nicht abrufbar (HTTP ${v.responseCode}).")
+            return v.inputStream.bufferedReader().readText()
+        } finally { v.disconnect() }
+    }
+
     fun laden(passwort: String): String {
         val v = URL(ADRESSE).openConnection() as HttpURLConnection
         v.connectTimeout = 15_000; v.readTimeout = 30_000
