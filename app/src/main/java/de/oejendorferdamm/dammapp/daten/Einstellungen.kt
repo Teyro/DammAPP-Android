@@ -100,4 +100,6 @@ data class Geheimnisse(
     val schulOrdner: String = "",
     /** App-Passwort der Schul-Nextcloud */
     val nextcloud: String = "",
+    /** Chat (Matrix): „@benutzer:server\tToken“ */
+    val matrix: String = "",
 )

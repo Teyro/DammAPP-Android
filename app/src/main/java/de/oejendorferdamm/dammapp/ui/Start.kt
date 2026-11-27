@@ -44,6 +44,7 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
     }, unten = {
         BottomAppBar(actions = {
             IconButton({ oeffne(Bereich.UNTIS) }) { Icon(Icons.Rounded.ManageSearch, "Stundenpläne suchen") }
+            IconButton({ oeffne(Bereich.CHAT) }) { Icon(Icons.Rounded.Forum, "Chat") }
             TextButton({ Sprecher.sprechen(c, Kern.briefing()) }) { Icon(Icons.Rounded.RecordVoiceOver, null); Spacer(Modifier.width(6.dp)); Text("Briefing") }
         }, floatingActionButton = {
             FloatingActionButton({ oeffne(Bereich.STUNDENPLAN) }) { Icon(Icons.Rounded.CalendarViewWeek, "Stundenplan") }

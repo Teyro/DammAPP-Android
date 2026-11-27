@@ -20,7 +20,7 @@ import de.oejendorferdamm.dammapp.daten.Kern
 /** Bereiche der App (auch Ziele aus Widget und Mitteilungen: dammapp://stoerungen …) */
 enum class Bereich(val titel: String) {
     START("DammAPP"), VERTRETUNG("Vertretung"), STUNDENPLAN("Stundenplan"), MENSA("Speiseplan"), ABWESEND("Abwesenheiten"),
-    STOERUNGEN("Störungen"), AUFGABEN("Aufgaben"), EINSTELLUNGEN("Einstellungen"), UNTIS("Stundenpläne"), FUSSBALL("Fußballplatz");
+    STOERUNGEN("Störungen"), AUFGABEN("Aufgaben"), EINSTELLUNGEN("Einstellungen"), UNTIS("Stundenpläne"), FUSSBALL("Fußballplatz"), CHAT("Chat");
     companion object {
         fun aus(i: Intent?): Bereich? = i?.data?.takeIf { it.scheme == "dammapp" }?.host?.let { h -> entries.firstOrNull { it.name.equals(h, true) } }
     }
@@ -52,6 +52,7 @@ fun App(ziel: MutableState<Bereich?>) {
                     Bereich.EINSTELLUNGEN -> EinstellungenSeite(::zurueck)
                     Bereich.UNTIS -> StundenplaeneSeite(::zurueck)
                     Bereich.FUSSBALL -> FussballSeite(::zurueck)
+                    Bereich.CHAT -> ChatSeite(::zurueck)
                 }
             }
         }
