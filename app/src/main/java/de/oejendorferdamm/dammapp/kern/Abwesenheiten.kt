@@ -9,7 +9,9 @@ import java.time.LocalDateTime
 
 /** Eine Abwesenheit aus IServ (nur zur Anzeige – keine Statistik je Kind, kein Export) */
 @kotlinx.serialization.Serializable
-data class Abwesenheit(val name: String, val klasse: String, val von: String, val bis: String, val art: String, val stunden: String = "") {
+data class Abwesenheit(val name: String, val klasse: String, val von: String, val bis: String, val art: String, val stunden: String = "",
+                       /** Wann die Meldung in IServ eingegangen ist („2026-11-23T07:12“) – nur, wenn der Export es enthält */
+                       val gemeldet: String? = null) {
     val stundenweise get() = stunden.isNotEmpty() && von == bis
 }
 
@@ -68,6 +70,7 @@ object Abwesenheiten {
         val sName = sp("name|schüler|schueler|kind") ?: return null
         val sVon = sp("von|beginn|start|datum|zeitraum|zeit|tag") ?: return null
         val sKlasse = sp("klasse|lerngruppe"); val sBis = sp("bis|ende"); val sArt = sp("art|grund|typ|status|kategorie"); val sStd = sp("stunde")
+        val sGem = sp(MELDE_SPALTE)?.takeIf { it != sVon }
         return zeilen.drop(1).mapNotNull { z ->
             if (z.size <= maxOf(sName, sVon)) return@mapNotNull null
             val daten = Html.alle("""(\d{1,2}\.\d{1,2}\.(?:\d{2,4})?)""", z[sVon])
@@ -75,7 +78,7 @@ object Abwesenheiten {
             if (z[sName].isEmpty()) return@mapNotNull null
             val bis = sBis?.let { z.getOrNull(it)?.let(::datum) } ?: daten.getOrNull(1)?.let(::datum) ?: von
             Abwesenheit(Html.nameSchoen(z[sName]), sKlasse?.let { z.getOrNull(it) } ?: "", von, bis, art(sArt?.let { z.getOrNull(it) } ?: ""),
-                sStd?.let { z.getOrNull(it) } ?: uhrzeit(z[sVon]))
+                sStd?.let { z.getOrNull(it) } ?: uhrzeit(z[sVon]), sGem?.let { z.getOrNull(it) }?.let(::zeitpunkt))
         }
     }
 
@@ -87,6 +90,7 @@ object Abwesenheiten {
         if (sName == null && sNach == null) return null
         val sVon = sp("von|beginn|start|zeitraum|abwesenheitszeit|datum") ?: return null
         val sKlasse = sp("klasse|lerngruppe"); val sBis = sp("bis|ende"); val sArt = sp("art|grund|typ|status|kategorie|entschuldig"); val sStd = sp("stunde")
+        val sGem = sp(MELDE_SPALTE)?.takeIf { it != sVon }
         fun f(z: List<String>, i: Int?) = i?.let { z.getOrNull(it) } ?: ""
         return zeilen.drop(1).mapNotNull { z ->
             val daten = Html.alle("""(\d{1,2}\.\d{1,2}\.(?:\d{2,4})?|\d{4}-\d{2}-\d{2})""", f(z, sVon))
@@ -94,11 +98,31 @@ object Abwesenheiten {
             val von = daten.firstOrNull()?.let(::datum) ?: return@mapNotNull null
             if (name.isEmpty()) return@mapNotNull null
             val bis = (if (sBis != null) datum(f(z, sBis)) else null) ?: daten.getOrNull(1)?.let(::datum) ?: von
-            Abwesenheit(name, f(z, sKlasse), von, bis, art(f(z, sArt)), if (sStd != null) f(z, sStd) else uhrzeit(f(z, sVon)))
+            Abwesenheit(name, f(z, sKlasse), von, bis, art(f(z, sArt)), if (sStd != null) f(z, sStd) else uhrzeit(f(z, sVon)), sGem?.let { zeitpunkt(f(z, it)) })
         }
     }
 
     /** „12.10.2026“, „12.10.“, „2026-10-12…“ → ISO-Tag */
+    /** Spalte mit dem Zeitpunkt der Meldung (IServ: „Erstellt“, „Gemeldet am“, „Erfasst“ …) */
+    const val MELDE_SPALTE = "erstellt|gemeldet|erfasst|eingetragen|angelegt|eingegangen|meldezeit|meldung am|created"
+
+    /** „23.11.2026 07:12“ / „2026-11-23 07:12:00“ → „2026-11-23T07:12“ (ohne Uhrzeit: null – dann lieber nichts zeigen) */
+    fun zeitpunkt(s: String): String? {
+        val tag = datum(s) ?: return null
+        val u = Regex("""(\d{1,2}):(\d{2})""").find(s) ?: return null
+        return "%sT%02d:%s".format(tag, u.groupValues[1].toInt(), u.groupValues[2])
+    }
+
+    /** „gemeldet um 07:12 Uhr“ (heute) bzw. „gemeldet Mo, 23.11. um 18:40 Uhr“ */
+    fun gemeldetText(a: Abwesenheit, heute: LocalDate = Zeit.heute()): String? {
+        val g = a.gemeldet?.takeIf { it.length >= 16 } ?: return null
+        val tag = runCatching { LocalDate.parse(g.take(10)) }.getOrNull() ?: return null
+        val uhr = g.takeLast(5)
+        if (tag == heute) return "gemeldet um $uhr Uhr"
+        val wt = listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")[tag.dayOfWeek.value - 1]
+        return "gemeldet %s, %02d.%02d. um %s Uhr".format(wt, tag.dayOfMonth, tag.monthValue, uhr)
+    }
+
     fun datum(s: String, jahr: Int? = null): String? {
         Html.erster("""(\d{4}-\d{2}-\d{2})""", s)?.let { return it }
         val m = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{2,4})?""").find(s) ?: return null

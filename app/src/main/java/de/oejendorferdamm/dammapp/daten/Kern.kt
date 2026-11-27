@@ -47,6 +47,12 @@ object Kern {
     var stoerungenFehler by mutableStateOf("")
     var aufgaben by mutableStateOf<AufgabenStand?>(null)
     var aufgabenFehler by mutableStateOf("")
+    /** Letzte vollständige Aktualisierung (ms) – Startseite „Zuletzt aktualisiert: heute, 06:18 Uhr“ */
+    var zuletzt by mutableStateOf(0L)
+    /** Quellen, die beim letzten Mal nicht geklappt haben (Name → Fehler) */
+    val quellenFehler get() = einstellungen.let { e -> listOf("Vertretungsplan" to (if (e.vertretung) vertretungFehler else ""), "Mensa" to (if (e.mensa) mensaFehler else ""),
+        "Abwesenheiten" to (if (e.abwesenheiten) abwesendFehler else ""), "Störungen" to (if (e.stoerungen) stoerungenFehler else ""),
+        "Aufgaben" to (if (e.aufgaben) aufgabenFehler else ""), "Untis" to (if (untisFehler.startsWith("Übergangslösung")) "" else untisFehler)).filter { it.second.isNotEmpty() } }
     var laedt by mutableStateOf(false)
     var meldung by mutableStateOf<String?>(null)
     /** Edupool verbinden: angezeigter Code und Freigabeseite, solange gewartet wird */
@@ -72,6 +78,7 @@ object Kern {
         untis = ablage.lies("untis"); mensaPlan = ablage.lies("mensa"); obstTage = ablage.lies("obst") ?: emptySet()
         schulTermine = ablage.lies("schultermine") ?: emptyList()
         abwesend = ablage.lies("abwesend"); stoerungen = ablage.lies("stoerungen"); aufgaben = ablage.lies("aufgaben")
+        zuletzt = ablage.zeit("zuletzt")
         Melder.kanaele(app)
         assistentOffen = !app.getSharedPreferences("assistent", Context.MODE_PRIVATE).getBoolean("fertig1", false)
     }
@@ -106,6 +113,7 @@ object Kern {
     suspend fun aktualisieren(erzwingen: Boolean = false) = if (vorschau) Unit else sperre.withLock {
         laedt = true
         try { withContext(Dispatchers.IO) { laden(erzwingen) } } finally { laedt = false }
+        zuletzt = System.currentTimeMillis(); ablage.zeit("zuletzt", zuletzt)
         Schultag.aktualisieren(app)
         de.oejendorferdamm.dammapp.widget.Widgets.aktualisieren(app)
     }

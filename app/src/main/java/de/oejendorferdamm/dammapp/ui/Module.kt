@@ -64,7 +64,7 @@ fun AbwesendSeite(zurueck: () -> Unit) {
                         val art = Abwesenheiten.arten[a.art] ?: ("📌" to "abwesend")
                         Box(Modifier.alpha(if (aus) 0.45f else 1f)) {
                             Zeile(art.first, if (aus) MaterialTheme.colorScheme.outline else Farben.fehlt, a.name,
-                                listOf(a.klasse, art.second, Abwesenheiten.zeitText(a, ziel)).filter { it.isNotEmpty() }.joinToString(" · "), onClick = { umschalten(a) }) {
+                                listOf(a.klasse, art.second, Abwesenheiten.zeitText(a, ziel), Abwesenheiten.gemeldetText(a) ?: "").filter { it.isNotEmpty() }.joinToString(" · "), onClick = { umschalten(a) }) {
                                 Icon(if (aus) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (aus) "Wieder mitzählen" else "Ausgrauen", tint = MaterialTheme.colorScheme.outline)
                             }
                         }

@@ -140,4 +140,20 @@ class KernTest {
         assertFalse(Stoerungen.istIch("Linda Beutel", "christian.stake"))
         assertTrue(Stoerungen.istIch("Linda Beutel", "christian.stake", "Linda Beutel"))
     }
+
+    /** Nextcloud-Ordner „DammAPP“ (PROPFIND) und Meldezeitpunkt aus dem IServ-Export */
+    @Test fun nextcloudUndMeldezeit() {
+        val xml = """<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/files/clevertouch/DammAPP/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+            <d:response><d:href>/remote.php/dav/files/clevertouch/DammAPP/Fu%c3%9fballplatz_TH_Pausenbelegung.pdf</d:href><d:propstat><d:prop><d:getetag>&quot;def&quot;</d:getetag><d:getcontentlength>175404</d:getcontentlength><d:resourcetype/></d:prop></d:propstat></d:response></d:multistatus>"""
+        val l = Nextcloud.lesen(xml)
+        assertEquals(listOf(Nextcloud.Datei("Fußballplatz_TH_Pausenbelegung.pdf", "def", 175404, false)), l)
+        assertEquals("Turnhalle", Nextcloud.planName(l[0].name))
+        assertEquals("Haus 1", Nextcloud.planName("Fußballplatz_Haus1_Pausenbelegung.pdf"))
+        assertEquals("https://nextcloud.teyro.synology.me/remote.php/dav/files/clevertouch/DammAPP/Pl%C3%A4ne", Nextcloud("https://nextcloud.teyro.synology.me/", "clevertouch", "x").url("DammAPP/Pläne"))
+        val a = Abwesenheiten.ausCSV("Name;Klasse;Von;Bis;Art;Erstellt\nMuster, Kim;;23.11.2026;23.11.2026;krank;22.11.2026 18:40:00\n")!!
+        assertEquals("2026-11-22T18:40", a[0].gemeldet)
+        assertEquals("gemeldet So, 22.11. um 18:40 Uhr", Abwesenheiten.gemeldetText(a[0], LocalDate.of(2026, 11, 23)))
+        assertEquals("gemeldet um 18:40 Uhr", Abwesenheiten.gemeldetText(a[0], LocalDate.of(2026, 11, 22)))
+        assertNull(Abwesenheiten.ausCSV("Name;Von\nKim;23.11.2026\n")!![0].gemeldet)
+    }
 }

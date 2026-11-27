@@ -1,6 +1,7 @@
 package de.oejendorferdamm.dammapp.ui
 
 import android.speech.tts.TextToSpeech
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -43,12 +44,27 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
     }, unten = {
         BottomAppBar(actions = {
             IconButton({ oeffne(Bereich.UNTIS) }) { Icon(Icons.Rounded.ManageSearch, "Stundenpläne suchen") }
+            IconButton({ oeffne(Bereich.FUSSBALL) }) { Icon(Icons.Rounded.SportsSoccer, "Fußballplatz") }
             TextButton({ Sprecher.sprechen(c, Kern.briefing()) }) { Icon(Icons.Rounded.RecordVoiceOver, null); Spacer(Modifier.width(6.dp)); Text("Briefing") }
         }, floatingActionButton = {
             FloatingActionButton({ oeffne(Bereich.STUNDENPLAN) }) { Icon(Icons.Rounded.CalendarViewWeek, "Stundenplan") }
         })
     }) {
         val ordnung = Startseite.ordnung(e.kachelReihenfolge, e.kachelAus, Kern.inDerSchule)
+        // klein und unaufdringlich: Stand der Daten, Warnsymbol, wenn eine Quelle nicht geklappt hat (antippen zeigt welche)
+        if (Kern.zuletzt > 0) item {
+            val z = java.time.Instant.ofEpochMilli(Kern.zuletzt).atZone(java.time.ZoneId.of("Europe/Berlin")).toLocalDateTime()
+            val tag = when (z.toLocalDate()) { Zeit.heute() -> "heute"; Zeit.heute().minusDays(1) -> "gestern"; else -> z.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.")) }
+            val fehler = Kern.quellenFehler
+            var offen by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable(enabled = fehler.isNotEmpty()) { offen = true }) {
+                Text("Zuletzt aktualisiert: $tag, " + z.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) + " Uhr",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (fehler.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Icon(Icons.Rounded.Warning, "Nicht alles aktuell", tint = Color(0xFFE8710A), modifier = Modifier.size(16.dp)) }
+            }
+            if (offen) AlertDialog(onDismissRequest = { offen = false }, confirmButton = { TextButton({ offen = false }) { Text("OK") } },
+                title = { Text("Nicht alles aktuell") }, text = { Text(fehler.joinToString("\n\n") { "${it.first}: ${it.second}" }) })
+        }
         if (e.vertretung && e.vertretungLink.isEmpty() && e.unterricht.isEmpty() && !e.untisAn) item {
             Karte(Icons.Rounded.WavingHand, MaterialTheme.colorScheme.primary, "Willkommen") {
                 Text("Trag in den Einstellungen dein Kürzel, den Ordner mit dem Vertretungsplan und WebUntis ein – dann steht hier dein Schultag.")
