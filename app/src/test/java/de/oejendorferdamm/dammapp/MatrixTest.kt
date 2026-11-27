@@ -26,3 +26,14 @@ class MatrixTest {
         assertEquals("ich", r[0].name("@ich:s"))
     }
 }
+
+class MatrixPinTest {
+    /** Favorit-Tag = angepinnt und oben; Suche in Namen und Nachrichten */
+    @Test fun anpinnenUndSuchen() {
+        val j = """{"next_batch":"s1","rooms":{"join":{"!alt:s":{"account_data":{"events":[{"type":"m.tag","content":{"tags":{"m.favourite":{"order":0.5}}}}]},"state":{"events":[{"type":"m.room.name","state_key":"","content":{"name":"Medien"}}]},"timeline":{"events":[{"type":"m.room.message","event_id":"a1","sender":"@a:s","origin_server_ts":1000,"content":{"body":"Beamer kaputt"}}]}},"!neu:s":{"state":{"events":[{"type":"m.room.name","state_key":"","content":{"name":"Kollegium"}}]},"timeline":{"events":[{"type":"m.room.message","event_id":"a2","sender":"@b:s","origin_server_ts":9000,"content":{"body":"Konferenz"}}]}}}}}"""
+        val r = Matrix.einarbeiten(JSONObject(j), emptyList()).first
+        assertEquals(listOf("Medien", "Kollegium"), r.map { it.name })
+        assertEquals(listOf("Medien"), Matrix.suchen(r, "beamer").map { it.name })
+        assertEquals(listOf("Kollegium"), Matrix.suchen(r, "koll").map { it.name })
+    }
+}

@@ -2,7 +2,8 @@ package de.oejendorferdamm.dammapp.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,7 +13,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,6 +79,14 @@ object Chat {
         runCatching { withContext(Dispatchers.IO) { m.senden(raum, text) } }.onFailure { fehler = it.message ?: "" }
     }
 
+    /** Anpinnen sofort zeigen, dann an den Server; bei Fehler zurück */
+    suspend fun anpinnen(r: Matrix.Raum) {
+        val m = matrix ?: return; val an = !r.angepinnt
+        fun setze(w: Boolean) { raeume = Matrix.sortiert(raeume.map { if (it.id == r.id) it.copy(angepinnt = w) else it }) }
+        setze(an)
+        runCatching { withContext(Dispatchers.IO) { m.anpinnen(r.id, an) } }.onFailure { fehler = it.message ?: ""; setze(!an) }
+    }
+
     suspend fun gelesen(r: Matrix.Raum) {
         val m = matrix ?: return; val letzte = r.nachrichten.lastOrNull() ?: return
         if (r.ungelesen == 0) return
@@ -103,13 +115,21 @@ private fun ChatBild(name: String, groesse: Int = 44) {
 }
 
 /** Liste der Chats; ein Chat öffnet sich auf derselben Seite (Zurück führt zur Liste) */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatSeite(zurueck: () -> Unit) {
     var offen by remember { mutableStateOf<String?>(null) }
+    var suche by remember { mutableStateOf("") }
+    var menue by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { Chat.schleife() }
     BackHandler(offen != null) { offen = null }
     offen?.let { id -> ChatRaum(id) { offen = null }; return }
     Seite("Chat", zurueck, aktualisieren = null) {
+        item {
+            OutlinedTextField(suche, { suche = it }, Modifier.fillMaxWidth(), placeholder = { Text("Chats durchsuchen") }, leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                trailingIcon = { if (suche.isNotEmpty()) IconButton({ suche = "" }) { Icon(Icons.Rounded.Close, "Leeren") } }, singleLine = true, shape = RoundedCornerShape(28.dp))
+        }
         if (Chat.fehler.isNotEmpty()) item { Text(Chat.fehler, color = MaterialTheme.colorScheme.error) }
         if (Chat.laedt && Chat.raeume.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         else if (Chat.raeume.isEmpty() && Chat.fehler.isEmpty()) item {
@@ -117,12 +137,19 @@ fun ChatSeite(zurueck: () -> Unit) {
                 Icon(Icons.Rounded.Forum, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("Keine Chats", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        items(Chat.raeume, key = { it.id }) { r ->
+        items(Matrix.suchen(Chat.raeume, suche), key = { it.id }) { r ->
             val l = r.nachrichten.lastOrNull()
             ListItem(
-                modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { offen = r.id },
+                modifier = Modifier.animateItem().clip(RoundedCornerShape(20.dp)).combinedClickable(onLongClick = { menue = r.id }) { offen = r.id },
                 leadingContent = { ChatBild(r.name) },
-                headlineContent = { Text(r.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (r.ungelesen > 0) FontWeight.Bold else null) },
+                headlineContent = { Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.name, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (r.ungelesen > 0) FontWeight.Bold else null)
+                    if (r.angepinnt) { Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.PushPin, "Angepinnt", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) }
+                    DropdownMenu(menue == r.id, { menue = null }) {
+                        DropdownMenuItem({ Text(if (r.angepinnt) "Loslösen" else "Anpinnen") }, { menue = null; scope.launch { Chat.anpinnen(r) } },
+                            leadingIcon = { Icon(Icons.Rounded.PushPin, null) })
+                    }
+                } },
                 supportingContent = { l?.let { Text((if (r.gruppe) r.name(it.absender).substringBefore(" ") + ": " else "") + it.text, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
                 trailingContent = {
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
