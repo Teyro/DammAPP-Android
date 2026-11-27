@@ -190,10 +190,12 @@ object Stoerungen {
         val ohneFormulare = ohneSkript.replace(Regex("""<form[\s\S]*?</form>""", RegexOption.IGNORE_CASE), " ")
         val starts = Regex(EINTRAG, RegexOption.IGNORE_CASE).findAll(ohneFormulare).map { it.range.first }.toList()
         val eintraege = ArrayList<StoerungVerlauf.Eintrag>()
+        val bilder = LinkedHashMap<String, String>()
         for ((n, start) in starts.withIndex()) {
             val ende = if (n + 1 < starts.size) starts[n + 1] else minOf(ohneFormulare.length, start + 6000)
             val block = ohneFormulare.substring(start, maxOf(start, ende))
             val autor = Html.text(Html.erster("""class=["'][^"']*\b(?:author|autor|user|username|name|creator)\b[^"']*["'][^>]*>([\s\S]*?)</""", block) ?: "")
+            if (autor.isNotEmpty()) Html.nameSchoen(autor).let { n -> if (n !in bilder) bildIn(block, von)?.let { bilder[n] = it } }
             val zeit = Html.text(Html.erster("""<time\b[^>]*>([\s\S]*?)</time>""", block) ?: Html.erster("""(\d{1,2}\.\d{1,2}\.\d{2,4}(?:,?\s*\d{1,2}:\d{2})?)""", block) ?: "")
             var text = Html.absatzText(block)
             for (weg in listOf(autor, zeit)) if (weg.isNotEmpty()) text = text.replace(weg, "")
@@ -206,11 +208,21 @@ object Stoerungen {
             if (t.isNotEmpty()) eintraege.add(StoerungVerlauf.Eintrag("", "", t.take(8000)))
         }
         // Ein Block mit mehreren Kommentaren (Sammelbehälter oder ganze Seite): an „Name am 18.11.2026 11:03“ trennen
-        return StoerungVerlauf(bereinigen(eintraege.flatMap(::aufteilen)), formular, avatare(html, von))
+        return StoerungVerlauf(bereinigen(eintraege.flatMap(::aufteilen)), formular, bilder + avatare(html, von))
     }
 
     /** Textbausteine der IServ-Seite (Knöpfe, leere Hinweise, Angaben-Spalten), die in Blasen keinen Sinn ergeben – je ganze Zeile */
     private val BAUSTEIN = Regex("""(?im)^[ \t]*(?:(?:es\s+(?:gibt|sind|wurden)\s+)?(?:noch\s+)?kein(?:e|en)?\s+(?:weitere[nrs]?\s+)?(?:kommentare?|antworten?|text|dateien|anh(?:ä|ae)nge?|beschreibung|nachrichten?)(?:\s+(?:vorhanden|verfügbar|hinzugefügt|angeh(?:ä|ae)ngt|hochgeladen))?[.!]?|(?:einen\s+|neuen?\s+)?(?:kommentare?|antwort)\s+(?:hinzufügen|schreiben|verfassen|absenden|abschicken|senden|speichern)|kommentare?(?:\s*\(\d+\))?|antworten|dateien|anh(?:ä|ae)nge?|bearbeiten|l(?:ö|oe)schen|speichern|abbrechen|zur(?:ü|ue)ck(?:\s+zur\s+(?:liste|(?:ü|ue)bersicht))?|details\s+zu\b.{0,80}|mehr\s+anzeigen|weniger\s+anzeigen|(?:status|raum|ort|ger(?:ä|ae)t|standort|kategorie|priorit(?:ä|ae)t|bearbeiter(?:in)?|zust(?:ä|ae)ndig|gemeldet(?:\s+von)?|erstellt(?:\s+von|\s+am)?|aktualisiert(?:\s+am)?|ge(?:ä|ae)ndert(?:\s+am)?|datum)\s*:.{0,60})[ \t]*$""")
+
+    /** Erstes Profilbild in einem Beitrag: <img> oder Hintergrundbild eines Elements mit „avatar/profil/photo/picture“ */
+    fun bildIn(block: String, von: String): String? {
+        for (tag in Html.alle("""(<(?:img\b|[a-z]+\b[^>]*background-image)[^>]*>)""", block)) {
+            if (!Html.hat("avatar|profil|photo|picture|userimage", tag)) continue
+            val s = Html.attr(tag, "src") ?: Html.erster("""url\(\s*['"]?([^'")\s]+)""", Html.entities(tag)) ?: continue
+            if (!s.startsWith("data:")) return Html.absolut(Html.entities(s), von)
+        }
+        return null
+    }
 
     /** Profilbilder der Seite: <img> mit „avatar/profil/photo/picture“ in Adresse oder Klasse und Namen in alt/title */
     fun avatare(html: String, von: String): Map<String, String> {

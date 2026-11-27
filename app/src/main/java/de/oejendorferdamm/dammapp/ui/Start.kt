@@ -75,7 +75,7 @@ fun StartSeite(oeffne: (Bereich) -> Unit) {
             "mensa" -> if (e.mensa) item { MensaKarte(oeffne) }
             "zahlen" -> item { ZahlenReihe(oeffne) }
             "schultermine" -> if (Kern.schulTermine.isNotEmpty()) item { SchulTermineKarte() }
-            "fussball" -> if (Kern.nextcloudBereit) item {
+            "fussball" -> item {
                 Karte(Icons.Rounded.SportsSoccer, Color(0xFF1E8E3E), "Fußballplatz", onClick = { oeffne(Bereich.FUSSBALL) }) {
                     Text("Pausenbelegung ansehen ›", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

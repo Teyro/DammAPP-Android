@@ -98,11 +98,14 @@ object Aufgaben {
         return AufgabenStand(aufgaben, boards.size, farben = farben.toList())
     }
 
+    /** Kartenfarben des Boards „Medien“ (Stand 27.11.2026) – gelten, bis Edupool selbst Farben liefert */
+    val MEDIEN_VORGABE = mapOf("Christian S." to "#80a4ae", "Vivi" to "#8b7dbe", "Christian N." to "#79a75a", "Jörn" to "#db954b", "Michelle" to "#7ba7d8")
+
     /** Wer welche Farbe hat – aus dem Board „Medien“: Mitglieder mit Farbe, sonst die Farbe der Karten, denen jemand zugewiesen ist */
     fun personenFarben(token: String, titel: String = "Medien"): Map<String, String> = runCatching {
         val b = liste(anfrage("/api/boards", token = token).first).firstOrNull { it.optString("title").ifEmpty { it.optString("name") }.contains(titel, true) } ?: return emptyMap()
         val id = b.opt("id")?.toString() ?: return emptyMap()
-        val m = LinkedHashMap<String, String>()
+        val m = LinkedHashMap<String, String>(); val karten = LinkedHashMap<String, String>()
         fun nimm(personen: Any?, farbe: String? = null) {
             val a = personen as? org.json.JSONArray ?: return
             for (i in 0 until a.length()) {
@@ -118,10 +121,11 @@ object Aufgaben {
         for (k in liste(anfrage("/api/cards/board/$id", token = token).first)) {
             // Karte je Person: Titel = Name („Christian S.“, „Vivi“), Kartenfarbe = Farbe der Person
             val f = farbNorm(k.optString("color")); val t = k.optString("title").trim()
-            if (f.isNotEmpty() && t.length <= 25 && Regex("""^\p{Lu}[\p{L}.\- ]*$""").matches(t) && t.split(" ").size <= 3) m[t] = "#$f"
+            if (f.isNotEmpty() && t.length <= 25 && Regex("""^\p{Lu}[\p{L}.\- ]*$""").matches(t) && t.split(" ").size <= 3) karten[t] = "#$f"
             nimm(k.opt("assignees") ?: k.opt("assigned_users") ?: k.opt("members"), k.optString("color"))
         }
-        m
+        // Personen-Karten sind die Farben, die alle sehen – Mitglieds-/Zuweisungsfarben nur, wenn es keine gibt
+        karten.ifEmpty { m }
     }.getOrDefault(emptyMap())
 
     /** Farbe nach Vorname (+ Anfang des Nachnamens): „Christian Stake Admin“ → „Christian S.“, „Viviane Haist“ → „Vivi“ */

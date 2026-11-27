@@ -2,6 +2,7 @@ package de.oejendorferdamm.dammapp.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -198,7 +199,7 @@ private fun StoerungDetail(m: Stoerung) {
                 fun tag(z: String) = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{2,4})""").find(z)?.destructured?.let { (d, mo, j) ->
                     runCatching { java.time.LocalDate.of(j.toInt().let { if (it < 100) 2000 + it else it }, mo.toInt(), d.toInt()) }.getOrNull() }
                 // jede Person eine eigene Farbe wie im WhatsApp-Gruppenchat: aus dem Board „Medien“, sonst der Reihe nach ohne Doppelte
-                val farben = personenFarben(liste.map { it.autor }) { Aufgaben.farbeFuer(it, Kern.personenFarben)?.let(::hexFarbe) }
+                val farben = personenFarben(liste.map { it.autor }) { Aufgaben.farbeFuer(it, Aufgaben.MEDIEN_VORGABE + Kern.personenFarben)?.let(::hexFarbe) }
                 fun tagText(t: java.time.LocalDate) = when (t) { Zeit.heute() -> "Heute"; Zeit.heute().minusDays(1) -> "Gestern"
                     else -> t.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", java.util.Locale.GERMAN)) }
                 liste.forEachIndexed { i, e ->
@@ -224,13 +225,13 @@ private fun StoerungDetail(m: Stoerung) {
                     val uhr = Regex("""\d{1,2}:\d{2}""").find(e.zeit)?.value
                     Row(Modifier.fillMaxWidth().padding(top = if (mitName) 6.dp else 0.dp), horizontalArrangement = if (technik) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!technik) { Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() }; Spacer(Modifier.width(8.dp)) }
-                        Surface(color = if (technik) farbe else farbe.copy(alpha = 0.22f),
+                        Surface(color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) farbe.copy(alpha = 0.5f) else farbe, // Kartenfarbe aus „Medien“; dunkel gedämpft, damit die helle Schrift lesbar bleibt
                             shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (technik) 18.dp else 4.dp, bottomEnd = if (technik) 4.dp else 18.dp),
                             modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(0.82f)) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), horizontalAlignment = if (technik) Alignment.End else Alignment.Start) {
-                                if (mitName && !technik && e.autor.isNotEmpty()) Text(e.autor, style = MaterialTheme.typography.labelMedium, color = farbe, fontWeight = FontWeight.SemiBold)
-                                Text(e.text, style = MaterialTheme.typography.bodyMedium, color = if (technik) Color.White else MaterialTheme.colorScheme.onSurface)
-                                uhr?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (technik) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                                if (mitName && !technik && e.autor.isNotEmpty()) Text(e.autor, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), fontWeight = FontWeight.SemiBold)
+                                Text(e.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                uhr?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                         }
                         if (technik) { Spacer(Modifier.width(8.dp)); Box(Modifier.alpha(if (mitName) 1f else 0f)) { kreis() } }

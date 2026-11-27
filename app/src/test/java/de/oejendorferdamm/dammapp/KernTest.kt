@@ -178,6 +178,10 @@ class KernTest {
         assertEquals("#7aab5c", Aufgaben.farbeFuer("Christian Normann", f))
         assertEquals("#8c7fc2", Aufgaben.farbeFuer("Viviane Haist Admin", f))
         assertEquals(null, Aufgaben.farbeFuer("Christian Xaver", f))
+        val m = Aufgaben.MEDIEN_VORGABE
+        assertEquals("#80a4ae", Aufgaben.farbeFuer("Christian Stake", m))
+        assertEquals("#79a75a", Aufgaben.farbeFuer("Christian Normann Admin", m))
+        assertEquals("#8b7dbe", Aufgaben.farbeFuer("Viviane Haist", m))
     }
 
     @Test fun avatare() {
@@ -185,6 +189,12 @@ class KernTest {
         val v = Stoerungen.verlaufAus(html, "https://schule.de/iserv/report/7")
         assertEquals("https://schule.de/iserv/core/avatar/user/kim.muster", v.avatar("Kim Muster Admin"))
         assertEquals(null, v.avatar("Schule am Damm"))
+    }
+
+    /** Ohne Namen am Bild: Profilbild (auch als Hintergrundbild) im Beitrag gehört zur Person des Beitrags */
+    @Test fun avatarImBeitrag() {
+        val html = """<div class='comment'><span class='avatar' style='background-image: url(&quot;/iserv/core/avatar/user/lea.beutel&quot;)'></span><span class='author'>Lea Beutel</span><p>Geht wieder.</p></div>"""
+        assertEquals("https://schule.de/iserv/core/avatar/user/lea.beutel", Stoerungen.verlaufAus(html, "https://schule.de/iserv/report/7").avatar("Lea Beutel"))
     }
 
     /** Eigene Statistik: späterer Stand ersetzt, leere Vorlage zählt nicht, Reserve-Aufsicht nicht */

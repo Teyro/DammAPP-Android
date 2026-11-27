@@ -168,7 +168,8 @@ fun hexFarbe(hex: String): androidx.compose.ui.graphics.Color =
     de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(hex).toLongOrNull(16)?.let { androidx.compose.ui.graphics.Color(0xFF000000 or it) } ?: androidx.compose.ui.graphics.Color.Gray
 
 /** Feste Farbe aus einem Namen (gleicher Name = gleiche Farbe) */
-private val namensPalette = listOf(0xFF1E88E5, 0xFF43A047, 0xFFFB8C00, 0xFF8E24AA, 0xFFD81B60, 0xFF00897B, 0xFF3949AB, 0xFF6D4C41, 0xFF00ACC1, 0xFF7CB342)
+// weiche Kartenfarben wie in Edupool (dunkle Schrift bleibt lesbar)
+private val namensPalette = listOf(0xFFE6837B, 0xFFE3B94F, 0xFF5FB58A, 0xFFB38AC4, 0xFFE889B5, 0xFF6FB8B3, 0xFF8F9BD6, 0xFFB89B7A, 0xFFA3C46B, 0xFF78B9D9)
 
 fun namensFarbe(name: String): androidx.compose.ui.graphics.Color =
     androidx.compose.ui.graphics.Color(namensPalette[Math.floorMod(name.lowercase().hashCode(), namensPalette.size)])
