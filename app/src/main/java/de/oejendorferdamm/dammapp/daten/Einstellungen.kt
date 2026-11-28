@@ -76,6 +76,9 @@ data class Einstellungen(
     /** Chat: während der Arbeit sofort, sonst gesammelt um [chatZusammenfassung] */
     val chatMelden: Boolean = true,
     val chatZusammenfassung: String = "18:00",
+    /** Chat-Blasen anderer in ihrer Edupool-Farbe; [eigeneFarben] = von Hand (Name → #rrggbb), geht vor Edupool */
+    val chatFarben: Boolean = true,
+    val eigeneFarben: Map<String, String> = emptyMap(),
     // Startseite
     val kachelReihenfolge: List<String> = emptyList(),
     val kachelAus: List<String> = emptyList(),

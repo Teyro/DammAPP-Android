@@ -199,7 +199,7 @@ private fun StoerungDetail(m: Stoerung) {
                 fun tag(z: String) = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{2,4})""").find(z)?.destructured?.let { (d, mo, j) ->
                     runCatching { java.time.LocalDate.of(j.toInt().let { if (it < 100) 2000 + it else it }, mo.toInt(), d.toInt()) }.getOrNull() }
                 // jede Person eine eigene Farbe wie im WhatsApp-Gruppenchat: aus dem Board „Medien“, sonst der Reihe nach ohne Doppelte
-                val farben = personenFarben(liste.map { it.autor }) { Aufgaben.farbeFuer(it, Aufgaben.MEDIEN_VORGABE + Kern.personenFarben)?.let(::hexFarbe) }
+                val farben = personenFarben(liste.map { it.autor }) { Aufgaben.farbeFuer(it, Kern.farbenPersonen)?.let(::hexFarbe) }
                 fun tagText(t: java.time.LocalDate) = when (t) { Zeit.heute() -> "Heute"; Zeit.heute().minusDays(1) -> "Gestern"
                     else -> t.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", java.util.Locale.GERMAN)) }
                 liste.forEachIndexed { i, e ->

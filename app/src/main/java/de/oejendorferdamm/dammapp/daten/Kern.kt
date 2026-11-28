@@ -128,6 +128,8 @@ object Kern {
     var untisSucheHinweis by mutableStateOf("")
     /** Farben der Personen (Board „Medien“) für die Blasen im Störungsverlauf */
     var personenFarben by mutableStateOf<Map<String, String>>(emptyMap())
+    /** Farben der Personen: fest (Board „Medien“) ← Edupool ← von Hand in den Einstellungen */
+    val farbenPersonen: Map<String, String> get() = Aufgaben.MEDIEN_VORGABE + personenFarben + einstellungen.eigeneFarben
     private var untisSuche: de.oejendorferdamm.dammapp.kern.UntisSuche? = null
     private var sicherungText: String? = null
 

@@ -4,6 +4,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.oejendorferdamm.dammapp.daten.Kern
 import de.oejendorferdamm.dammapp.daten.Melder
+import de.oejendorferdamm.dammapp.kern.Aufgaben
 import de.oejendorferdamm.dammapp.kern.Matrix
 import de.oejendorferdamm.dammapp.kern.Zeit
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +87,30 @@ object Chat {
         }
     }
 
+    private val bilder = android.util.LruCache<String, ImageBitmap>(80)
+
+    /** Profil-/Vorschaubild (angemeldet geladen, im Speicher gemerkt) */
+    suspend fun bild(mxc: String, groesse: Int): ImageBitmap? {
+        val k = "$mxc|$groesse"
+        bilder.get(k)?.let { return it }
+        val m = matrix ?: return null
+        val b = withContext(Dispatchers.IO) { runCatching { m.medien(mxc, groesse).let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }.getOrNull() } ?: return null
+        bilder.put(k, b); return b
+    }
+
+    /** Anhang ganz laden und mit passender App öffnen (Galerie, PDF-Anzeige …) */
+    suspend fun oeffnen(c: android.content.Context, a: Matrix.Anhang) {
+        val m = matrix ?: return
+        runCatching {
+            val f = withContext(Dispatchers.IO) {
+                java.io.File(c.cacheDir, "chat").apply { mkdirs() }.resolve(a.name.replace("/", "-").ifEmpty { "Anhang" }).apply { writeBytes(m.medien(a.mxc)) }
+            }
+            val u = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.fileprovider", f)
+            val typ = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: when (a.art) { "bild" -> "image/*"; "video" -> "video/*"; "audio" -> "audio/*"; else -> "*/*" }
+            c.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(u, typ).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { fehler = it.message ?: "Anhang lässt sich nicht öffnen" }
+    }
+
     suspend fun senden(raum: String, text: String) {
         val m = matrix ?: return
         runCatching { withContext(Dispatchers.IO) { m.senden(raum, text) } }.onFailure { fehler = it.message ?: "" }
@@ -106,13 +142,21 @@ private fun zeitKurz(ms: Long): String {
     }
 }
 
-/** Initialen im Kreis in der Containerfarbe des Themas */
+/** Profilbild; ohne Foto Initialen im Kreis (Containerfarbe oder Farbe der Person) */
 @Composable
-private fun ChatBild(name: String, groesse: Int = 44) {
+private fun ChatBild(name: String, groesse: Int = 44, mxc: String = "", farbe: Color? = null) {
     val i = name.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase()
-    Box(Modifier.size(groesse.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-        Text(i.ifEmpty { "?" }, color = MaterialTheme.colorScheme.onPrimaryContainer, style = if (groesse > 32) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall)
+    Box(Modifier.size(groesse.dp).clip(CircleShape).background(farbe ?: MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+        Text(i.ifEmpty { "?" }, color = if (farbe != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer, style = if (groesse > 32) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall)
+        if (mxc.isNotEmpty()) MatrixBild(mxc, 96, Modifier.matchParentSize())
     }
+}
+
+/** Bild vom Chat-Server; solange es lädt: nichts */
+@Composable
+private fun MatrixBild(mxc: String, groesse: Int, modifier: Modifier = Modifier) {
+    val b by produceState<ImageBitmap?>(null, mxc) { value = Chat.bild(mxc, groesse) }
+    b?.let { Image(it, null, modifier, contentScale = ContentScale.Crop) }
 }
 
 /** Liste der Chats; ein Chat öffnet sich auf derselben Seite (Zurück führt zur Liste) */
@@ -142,7 +186,7 @@ fun ChatSeite(zurueck: () -> Unit) {
             val l = r.nachrichten.lastOrNull()
             ListItem(
                 modifier = Modifier.animateItem().clip(RoundedCornerShape(20.dp)).combinedClickable(onLongClick = { menue = r.id }) { offen = r.id },
-                leadingContent = { ChatBild(r.name) },
+                leadingContent = { ChatBild(r.name, mxc = r.bild) },
                 headlineContent = { Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(r.name, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (r.ungelesen > 0) FontWeight.Bold else null)
                     if (r.angepinnt) { Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.PushPin, "Angepinnt", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) }
@@ -172,10 +216,13 @@ private fun ChatRaum(id: String, zurueck: () -> Unit) {
     var text by remember { mutableStateOf("") }
     val liste = rememberLazyListState()
     val l = r.nachrichten.asReversed()
+    val c = LocalContext.current
+    val dunkel = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val farben = if (Kern.einstellungen.chatFarben) Kern.farbenPersonen else null
     LaunchedEffect(r.nachrichten.lastOrNull()?.id) { liste.animateScrollToItem(0); Chat.gelesen(r) }
     Scaffold(
         topBar = {
-            TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) { ChatBild(r.name, 36); Spacer(Modifier.width(12.dp)); Text(r.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+            TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) { ChatBild(r.name, 36, r.bild); Spacer(Modifier.width(12.dp)); Text(r.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = { IconButton(zurueck) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } })
         },
         bottomBar = {
@@ -195,18 +242,37 @@ private fun ChatRaum(id: String, zurueck: () -> Unit) {
                 val n = l[i]; val aelter = l.getOrNull(i + 1); val neuer = l.getOrNull(i - 1)
                 val eigen = n.absender == Chat.ich
                 val erste = aelter?.absender != n.absender; val letzte = neuer?.absender != n.absender
+                val name = r.name(n.absender)
+                val farbe = if (eigen) null else farben?.let { Aufgaben.farbeFuer(name, it) }?.let(::hexFarbe)
+                val hinten = if (eigen) MaterialTheme.colorScheme.primary else farbe?.let { if (dunkel) it.copy(alpha = 0.5f) else it } ?: MaterialTheme.colorScheme.surfaceContainerHighest
+                val vorne = if (eigen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                val form = RoundedCornerShape(20.dp, 20.dp, if (eigen || !letzte) 20.dp else 4.dp, if (!eigen || !letzte) 20.dp else 4.dp)
                 Column {
                     if (aelter == null || n.zeit - aelter.zeit > 3_600_000) Text(zeitKurz(n.zeit), Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Row(Modifier.fillMaxWidth().padding(top = if (erste) 6.dp else 0.dp), horizontalArrangement = if (eigen) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
-                        if (!eigen && r.gruppe) { Box(Modifier.size(28.dp)) { if (letzte) ChatBild(r.name(n.absender), 28) }; Spacer(Modifier.width(6.dp)) }
-                        Column(Modifier.widthIn(max = 300.dp)) {
-                            if (!eigen && r.gruppe && erste) Text(r.name(n.absender), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 12.dp, bottom = 2.dp))
-                            Surface(color = if (eigen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
-                                shape = RoundedCornerShape(20.dp, 20.dp, if (eigen || !letzte) 20.dp else 4.dp, if (!eigen || !letzte) 20.dp else 4.dp)) {
+                        if (!eigen && r.gruppe) { Box(Modifier.size(28.dp)) { if (letzte) ChatBild(name, 28, r.bilder[n.absender].orEmpty(), farbe) }; Spacer(Modifier.width(6.dp)) }
+                        Column(Modifier.widthIn(max = 300.dp), horizontalAlignment = if (eigen) Alignment.End else Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            if (!eigen && r.gruppe && erste) Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 12.dp, bottom = 2.dp))
+                            n.anhang?.let { a ->
+                                val bild = if (a.art == "bild") a.mxc else a.vorschau
+                                val tippen = Modifier.clickable { scope.launch { Chat.oeffnen(c, a) } }
+                                if (bild.isNotEmpty()) {
+                                    val seiten = if (a.breite > 0 && a.hoehe > 0) a.breite.toFloat() / a.hoehe else 4f / 3
+                                    Box(Modifier.width(if (seiten >= 1) 240.dp else 240.dp * seiten).aspectRatio(seiten).clip(form).background(MaterialTheme.colorScheme.surfaceContainerHighest).then(tippen), contentAlignment = Alignment.Center) {
+                                        MatrixBild(bild, 800, Modifier.matchParentSize())
+                                        if (a.art == "video") Icon(Icons.Rounded.PlayCircle, "Video abspielen", Modifier.size(48.dp), tint = Color.White)
+                                    }
+                                } else Surface(tippen, color = hinten, shape = form) {
+                                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(if (a.art == "audio") Icons.Rounded.GraphicEq else Icons.Rounded.Description, null, tint = vorne)
+                                        Text(a.name.ifEmpty { a.text }, color = vorne, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                            if (n.anhang == null || n.anhang.beschriftung.isNotEmpty()) Surface(color = hinten, shape = form) {
                                 Text(n.text, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), style = MaterialTheme.typography.bodyLarge,
-                                    fontStyle = if (n.verschluesselt) FontStyle.Italic else null,
-                                    color = if (eigen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                    fontStyle = if (n.verschluesselt) FontStyle.Italic else null, color = vorne)
                             }
                         }
                     }

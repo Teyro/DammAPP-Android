@@ -6,6 +6,8 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -249,6 +251,29 @@ private fun androidx.compose.foundation.lazy.LazyListScope.iserv() {
             }
         }
     }
+    gruppe("Farben der Personen", "Kommen aus dem Edupool-Board „Medien“ (Karte je Person). Gilt für den Störungs-Chat und den Chat – der Name wird nach Vorname (+ Anfang des Nachnamens) zugeordnet, „Viviane Haist“ → „Vivi“.") {
+        Schalter("Chat-Blasen in diesen Farben", x.chatFarben) { an -> e { it.copy(chatFarben = an) } }
+        val alle = Kern.farbenPersonen
+        val auswahl = (alle.values + PERSONEN_PALETTE).distinctBy { de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(it) }
+        alle.keys.sorted().forEach { name ->
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(auswahl.size) { i ->
+                    val f = auswahl[i]
+                    val an = de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(f) == de.oejendorferdamm.dammapp.kern.Aufgaben.farbNorm(alle[name] ?: "")
+                    androidx.compose.foundation.layout.Box(Modifier.size(30.dp).background(hexFarbe(f), androidx.compose.foundation.shape.CircleShape)
+                        .border(if (an) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.CircleShape)
+                        .clickable { e { it.copy(eigeneFarben = it.eigeneFarben + (name to f)) } })
+                }
+            }
+        }
+        var neu by remember { mutableStateOf("") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(neu, { neu = it }, Modifier.weight(1f), singleLine = true, label = { Text("Name wie im Chat, z. B. Vivi") })
+            FilledTonalButton({ e { it.copy(eigeneFarben = it.eigeneFarben + (neu.trim() to PERSONEN_PALETTE[6])) }; neu = "" }, enabled = neu.trim().length >= 3) { Text("Hinzufügen") }
+        }
+        if (x.eigeneFarben.isNotEmpty()) TextButton({ e { it.copy(eigeneFarben = emptyMap()) } }) { Text("Eigene Farben zurücksetzen", color = MaterialTheme.colorScheme.error) }
+    }
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.mitteilungen() {
@@ -308,3 +333,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.ueber() {
         TextButton({ c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Teyro/DammAPP-Android"))) }) { Text("DammAPP auf GitHub") }
     }
 }
+
+/** weiche Kartenfarben wie in Edupool (dunkle Schrift bleibt lesbar) */
+private val PERSONEN_PALETTE = listOf("#e6837b", "#e3b94f", "#5fb58a", "#b38ac4", "#e889b5", "#6fb8b3", "#8f9bd6", "#b89b7a", "#a3c46b", "#78b9d9")
